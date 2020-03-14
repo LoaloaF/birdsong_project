@@ -1,0 +1,26 @@
+Number of recordings: 32
+
+
+
+Fileformat: 
+-------------------------
+bird1           bird2           no_rec      filetype
+------------------------
+b8p2male    -   b10o15female    _10_           *
+
+
+
+Filetypes:
+-------------------------
+filetype                    description                                         sampling rate   #channels
+-------------------------
+SdrChannels.w64	            The demodulated SDR channels.                       r_lf            3
+SdrCarrierFreq.w64          The estimated carrier frequencies f_c for           r_tr            3
+                            all SDR channels                            
+SdrReceiveFreq.w64	        The mixing frequencies f_r for all SDR channels.    r_tr            3
+SdrSignalStrength.w64	    The signal's power spectral density at f_c for      r_tr            3
+                            all SDR channels.
+DAQmxChannels.w64	        The NI DAQ channels.                                r_daq           1
+SdrChannelList.csv          The SDR channel list as configured in the GUI.      -
+prefix>_log.txt             Overflow events and runtime errors are logged 
+                            in here.

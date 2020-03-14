@@ -1,0 +1,512 @@
+\documentclass[10pt]{article}
+
+\usepackage{fullpage}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage[section]{placeins}
+\usepackage{xcolor}
+\usepackage{breakcites}
+\usepackage{lineno}
+
+
+
+
+
+\PassOptionsToPackage{hyphens}{url}
+\usepackage[colorlinks = true,
+            linkcolor = blue,
+            urlcolor  = blue,
+            citecolor = blue,
+            anchorcolor = blue]{hyperref}
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\@combinedblfloats{\box\@outputbox}{\unvbox\@outputbox}{}{%
+  \errmessage{\noexpand\@combinedblfloats could not be patched}%
+}%
+\makeatother
+
+
+\usepackage[round]{natbib}
+\let\cite\citep
+
+
+
+
+\renewenvironment{abstract}
+  {{\bfseries\noindent{\abstractname}\par\nobreak}\footnotesize}
+  {\bigskip}
+
+\titlespacing{\section}{0pt}{*3}{*1}
+\titlespacing{\subsection}{0pt}{*2}{*0.5}
+\titlespacing{\subsubsection}{0pt}{*1.5}{0pt}
+
+
+\usepackage{authblk}
+
+
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage{latexsym}
+\usepackage{textcomp}
+\usepackage{longtable}
+\usepackage{tabulary}
+\usepackage{booktabs,array,multirow}
+\usepackage{amsfonts,amsmath,amssymb}
+\providecommand\citet{\cite}
+\providecommand\citep{\cite}
+\providecommand\citealt{\cite}
+% You can conditionalize code for latexml or normal latex using this.
+\newif\iflatexml\latexmlfalse
+\AtBeginDocument{\DeclareGraphicsExtensions{.pdf,.PDF,.eps,.EPS,.png,.PNG,.tif,.TIF,.jpg,.JPG,.jpeg,.JPEG}}
+
+\usepackage[utf8]{inputenc}
+\usepackage[ngerman,english]{babel}
+
+
+
+
+
+
+\usepackage{siunitx}
+
+\usepackage{listings}
+\usepackage{color}
+
+\begin{document}
+
+\title{SDR Birdrec: Software Documentation}
+
+
+
+\author[1]{Linus Rüttimann}%
+\affil[1]{ETH Zurich}%
+
+
+\vspace{-1em}
+
+
+
+  \date{\today}
+
+
+\begingroup
+\let\center\flushleft
+\let\endcenter\endflushleft
+\maketitle
+\endgroup
+
+
+
+
+
+
+
+
+
+\section{What is SDR Birdrec?}
+
+SDR Birdrec is an open-source software to record FM radio signals
+transmitted from miniature backpacks attached to songbirds like zebra
+finches (\href{https://github.com/rlinus/SdrBirdrec}{GitHub link}). It
+is programmed in MATLAB (GUI/frontend) and C++ (backend). Binaries are
+provided for 64-bit Windows. In combination with the backpacks the
+software is thought as a tool to study the social behaviour of
+songbirds. The backpacks consist of a microphone or accelerometer (which
+functions as a contact microphone) together with a battery and a FM
+radio transmitter. SDR Birdrec provides functionality to demodulate and
+record the radio signal from multiple of these backpacks with a single
+SDR (software defined radio) device. As the carrier frequency of the
+radio signal from the backpacks is typically not stable, the software
+supports carrier frequency tracking. Additionally, one or multiple
+analog \href{http://www.ni.com/data-acquisition/}{NI DAQ} channels can
+be recorded, where clock synchronization between the SDR and NI DAQ
+device is supported. This feature allows to simultaneously record from
+the backpacks and from stationary microphones.
+
+\subsection{About the Backpacks and the Typical Experimental Setup
+\label{backpack_and_exp_setup}}
+
+The software is designed to be used in scientific experiments that are
+aimed to study the social behaviour of zebra finches. In a typical
+experimental setup multiple birds are in a cage, which has a volume of
+about 1 m3. Each bird is equipped with a backpack that functions as a
+wireless (contact) microphone. The backpacks transmit a radio signal in
+the 300 MHz band. The cage is equipped with a receiver antenna, a
+stationary microphone and multiple video cameras. The backpacks make it
+possible to assign vocalizations to specific birds.
+
+In order to not affect the behaviour of the birds the backpacks must be
+very light (\textasciitilde{}1 g). Nevertheless, the battery should last
+several days. These requirements limit the complexity of the electronic
+circuit and the size of the battery on the backpacks. In the current
+design, which is based on a design by \citet{Ter_Maat_2014}, a very simple
+transmitter circuit is used, with only one transistor and only one coil
+that functions as the inductor in the LC circuit that determines the
+carrier frequency of the radio signal and at the same time as the
+antenna. As required, the advantages of this design are its light weight
+and its low power consumption. However, as a result of this design the
+carrier frequency is very unstable. The carrier frequency is a function
+of the inductance of the coil. The inductance, on the other hand, is
+modulated by changes in the magnetic permeability in the surrounding
+area of the coil. Because the coil is also used as an antenna, it can
+not be shielded against such influences without significant attenuation
+of the radio signal. During the recordings this basically results in
+shifts of the carrier frequency induced by movements of the bird that
+carries the backpack and by movements of other birds that are in the
+near proximity of this bird. The magnitude of these shifts has been
+observed to be between 100 kHz and 1 MHz in most cases. Furthermore, the
+shifts are usually temporary, in that the carrier frequency shifts back
+to its original position when the birds stop the movements.
+
+The instability of the carrier frequency makes the demodulation of the
+radio signal more difficult. As indicated by its name, in a FM
+(frequency modulation) transmitter the carrier frequency is modulated by
+the amplitude of the signal that is to be transmitted (which is the
+microphone signal in this application). The demodulation of such a
+signal basically consists in the recovery of the instantaneous carrier
+frequency from the received radio signal. However, due to the effects
+described above, the carrier frequency is also modulated by changes of
+the magnetic permeability near the transmitter and hence indirectly by
+movements of the birds. Hence, the demodulated signal ends up to be the
+sum of the microphone signal and the integral of the frequency changes
+induced by the described effect. This second signal part can, of course,
+be interpreted as noise, however, as it is modulated by movements of the
+birds, it encodes valuable information, for instance it can be used to
+detect copulations.
+
+In preparation of a copulation event the male bird jumps on the back of
+the female bird. It has been observed that this causes a stereotyped
+downshift of the carrier frequency of the radio signal from the backpack
+on the female bird for the duration of the copulation
+(\textasciitilde{}2 s). Together with cues in the auditory recording
+(the male bird flaps its wing to keep balance) this can be used to
+detect copulations.
+
+\section{Signal Processing Algorithm} \label{Signal_Processing_Algorithm}
+The output of the SDR device is a broadband quadrature signal of sample rate $r_\text{HF}$ around a certain RF center frequency shifted to the baseband. The backpack radio signals must first be extracted from this broadband signal, in a second step the signals are frequency demodulated and in a last step the signals are downsampled to a sample rate that is appropriate for storing.
+
+The first step is conducted with a multiband mixing and downsampling filterbank as presented by \citet{Borgerding_2006}. The method uses overlap-save fast convolution FIR filtering combined with frequency translation and downsampling in the Fourier domain. The advantage of this technique is that the forward FFT can be reused for all channels. Furthermore, fast convolution reduces the complexity of FIR filtering from $O(n^2)$ to $O(n\log{}n)$. The disadvantage of this method is that the mixing frequency $f_r$ can not be arbitrary, only frequencies on a grid with step size
+
+\begin{equation}
+\Delta f_r = \frac{r_\text{HF}}{P-1}
+\end{equation}
+
+are allowed, where $P$ is the transient length of the decimation filter. The output of the first step are $N_\text{CH}$ quadrature signals of sample rate $r_\text{IF} = \frac{1}{D_1} r_\text{HF}$, where $N_\text{CH}$ is the number of channels and $D_1$ is the decimation factor.
+
+In the second step frequency demodulation is conducted. This is done by calculating the phase angle of the complex samples, followed by phase unwrapping and numerical differentiation. This step is followed by a final decimation step, which downsamples the signals to a sample rate of $r_\text{LF} = \frac{1}{D_2} r_\text{IF}$.
+
+The fact that the mixing frequency $f_r$ can not take on arbitrary values is unproblematic if the step size $\Delta f_r$ is small enough, because a constant offset between the mixing frequency and the carrier frequency $f_c$ of the backpack radio signal just leads to a DC offset in the demodulated signal. Small enough means that it must be ensured that the bandwidth of the FM modulated backpack radio signal is contained in the interval $\left(f_r - \frac{r_\text{IF}}{2}, f_r + \frac{r_\text{IF}}{2}\right)$ at all times, hence the conditions 
+
+\begin{equation}
+\label{eq:fcondition}
+f_r - \frac{r_\text{IF}}{2} < f_c - \frac{B_\text{FM}}{2} \text{ and } f_c + \frac{B_\text{FM}}{2} < f_r + \frac{r_\text{IF}}{2}
+\end{equation}
+
+must be fulfilled, where $B_\text{FM}$ is the bandwidth of the FM modulated backpack signal. $B_\text{FM}$ can be approximated with Carson's bandwidth rule to
+
+\begin{equation}
+B_\text{FM} \approx 2(B_x + f_\text{dev}) \text{,}
+\end{equation}
+
+where $B_x$ is the (one-sided) bandwidth of the modulating signal and $f_\text{dev}$ is the frequency deviation, which is a parameter of the radio transmitter (the maximal deviation of the FM instantaneous frequency from the carrier frequency). Condition \ref{eq:fcondition} can only be fulfilled for an arbitrary $f_c$ if
+
+\begin{equation}
+\Delta f_r < r_\text{IF} - B_\text{FM} \text{.}
+\end{equation}
+
+As noted in Section \ref{backpack_and_exp_setup} the carrier frequency $f_c$ is typically not constant but varies with time. In order to account for that, frequency tracking is performed by updating $f_r$ depending on an estimate of $f_c$. The update is performed $r_\text{TR}$ times per second, where $r_\text{TR}$ is the tracking rate. The carrier frequency $f_c$ is estimated by finding the frequency bin with maximal power in the forward FFT frame from the fast convolution filterbank in a prespecified, channel specific frequency band (the channel bands of different backpack channels are not allowed to overlap). The update rule is as follows:
+
+\begin{lstlisting}[language=Pascal, mathescape=true]   
+If abs($f_r$ - $f_c$) > $f_\text{th}$ Then $f_r$ := round($f_c$/$\Delta f_r$)*$\Delta f_r$;
+\end{lstlisting}
+\bigskip \bigskip
+
+where $f_\text{th}$ is a threshold. Considering Condition \ref{eq:fcondition} the threshold must satisfy
+
+\begin{equation}
+f_\text{th} < \frac{r_\text{IF} - B_\text{FM}}{2} \text{.}
+\end{equation}
+
+\subsection{Default rates and parameters}
+The SDR output sample rate $r_\text{HF}$ can be configured in the GUI of SDR Birdrec. Depending on the performance of the executing machine and on other (background) processes that run on it, it may happen that samples are dropped (buffer overflow). If this happens frequently, the use of a lower sample rate $r_\text{HF}$ should be considered. In the case of a buffer overflow the number of lost SDR samples is reported to the console and a log file. Then a corresponding number of zeros is inserted into the input SDR stream, so that everything stays in sync.
+
+The NI DAQ channels are recorded with a sample rate of $r_\text{DAQ}$. This rate and the rates and parameters introduced above default to the following values:
+
+\begin{itemize}
+\item $r_\text{DAQ}$: 32 kHz
+\item $r_\text{HF}$: 2.4 - 9.6 MHz (configurable in GUI)
+\item $r_\text{IF}$: 240 kHz
+\item $r_\text{LF}$: 24 kHz
+\item $r_\text{TR}$: 20 Hz
+\item $f_\text{th}$: 60 kHz
+\end{itemize}
+
+
+
+
+\section{User guide}\label{user-guide}
+
+SDR Birdrec comes with a MATLAB GUI, not all settings are configurable
+in the GUI though. Advanced settings can be changed in the
+\texttt{recorder.m} script.
+
+\subsection{Supported SDR Hardware}\label{supported-sdr-hardware}
+
+SDR Birdrec uses the API and runtime library
+\href{https://github.com/pothosware/SoapySDR/wiki}{SoapySDR} to
+interface with SDR devices. As this prevents the need to interface with
+the driver of a device directly, SDR Birdrec can support a wide variety
+of SDR devices (cf.
+\href{https://github.com/pothosware/SoapySDR/wiki/FAQ\#what-devices-are-supported}{this
+list}). It should be noted though that during development a
+\href{https://www.ettus.com/product/details/UB200-KIT}{USRP B200} was
+used, other devices have not been tested. The clock synchronization
+feature will not work with most non-USRP hardware, as the necessary 10
+MHz clock and PPS inputs are not available on most other devices.
+
+\subsection{Installation Instructions}\label{installation-instructions}
+
+A ZIP archive is provided with SDR Birdrec for 64-bit Windows. In
+addition to SDR Birdrec some other software componets must be installed.
+Follow these instructions:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Download and install the newest version of PothosSDR from
+  \href{https://github.com/pothosware/PothosSDR/wiki/Tutorial\#id1}{here}
+  (this package includes SoapySDR, a separate installer for just
+  SoapySDR is currently not available). Ensure that the bin folder
+  (example C:\Program Files\PothosSDR\bin) is on the system PATH after
+  installation.
+\item
+  Download and install the newest version of NI-DAQmx from
+  \href{https://www.ni.com/dataacquisition/nidaqmx.htm}{here}.
+\item
+  Download and install the Microsoft Visual C++ Redistributable for
+  Visual Studio 2017 (x64) from
+  \href{https://go.microsoft.com/fwlink/?LinkId=746572}{here}
+\item
+  Download and unzip SDR Birdrec. Add the unzipped folder and the bin
+  subfolder to the MATLAB path.
+\end{enumerate}
+
+Additional steps may be required for certain SDR devices. For USRP
+devices the following steps must also be executed:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\setcounter{enumi}{4}
+\item
+  \textbf{Additional step for USRP devices: FPGA and firmware images
+  installation} For USRP devices FPGA and firmware images must be
+  downloaded to the directory that is specified in the
+  \texttt{UHD\_IMAGES\_DIR} system environment variable.
+  \texttt{UHD\_IMAGES\_DIR} is set to
+  \texttt{C:\textbackslash{}Program\ Files\textbackslash{}PothosSDR\textbackslash{}share\textbackslash{}uhd\textbackslash{}images}
+  by default. The FPGA and firmware images can be downloaded and
+  installed automatically with the uhd\_images\_downloader.py Python
+  script (which is located at
+  \texttt{C:\textbackslash{}Program\ Files\textbackslash{}PothosSDR\textbackslash{}lib\textbackslash{}uhd\textbackslash{}utils\textbackslash{}uhd\_images\_downloader.py}).
+  If Python is not installed, this can also be done manually. First, the
+  images must be downloaded from
+  \url{http://files.ettus.com/binaries/images/}, the filename of the
+  required file can be found in the uhd\_images\_downloader.py script
+  (open it with a text editor, the filename is specified in the
+  \texttt{\_AUTOGEN\_IMAGES\_FILENAME} variable at the beginning of the
+  script). Secondly, the ZIP file must be unpacked into the directory
+  specified in \texttt{UHD\_IMAGES\_DIR}.
+\item
+  \textbf{Additionl step for USB USRP devices: USB driver installation}
+  For USRP devices with USB connection (like the USRP B200) a USB driver
+  must be installed. Follow the steps
+  \href{http://files.ettus.com/manual/page_transport.html\#transport_usb_installwin}{here}.
+\end{enumerate}
+
+The succssesful installation of an SDR device can be verified with the
+SoapySDRUtil command line tool (comes as part of SoapySDR). Execute the
+command \texttt{SoapySDRUtil\ -\/-find} in the console to get a list of
+all detected SDR devices. Execute
+\texttt{SoapySDRUtil\ -\/-make="driver=foo,type=bar"} (where ``foo'' and
+``bar'' are replaced with actual values; e.g.,
+\texttt{SoapySDRUtil\ -\/-make="driver=uhd,type=b200"}) to test load a
+specific SDR device.
+
+After SDR Birdrec is installed and its directories are on the MATLAB
+path, it can be started with the command \texttt{sdr\_birdrec} from the
+MATLAB console.
+
+\subsection{File Format}\label{file-format}
+
+SDR Birdrec uses the W64 file format to store data. The W64 format is an
+extension of the WAV format that supports file sizes over 4 GiB (this is
+a limitation of the WAV format, which comes from the fact that it uses a
+32-bit integer to store the file size in the file header). SDR Birdrec
+generates seven files by default (or six if no NI DAQ channels are
+recorded). The filenames consist of a common prefix that can be
+configured in the GUI and and a suffix that depends on the file:\selectlanguage{english}
+\begin{longtable}[]{@{}lll@{}}
+\toprule
+\begin{minipage}[b]{0.13\columnwidth}\raggedright\strut
+Filename\strut
+\end{minipage} & \begin{minipage}[b]{0.18\columnwidth}\raggedright\strut
+Description\strut
+\end{minipage} & \begin{minipage}[b]{0.18\columnwidth}\raggedright\strut
+Sample Rate\strut
+\end{minipage}\tabularnewline
+\midrule
+\endhead
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_SdrChannelList.csv}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The SDR channel list as configured in the GUI.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+-\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_SdrChannels.w64}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The demodulated SDR channels.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+\(r_\text{LF}\)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_SdrCarrierFreq.w64}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The estimated carrier frequencies \(f_c\) for all SDR
+channels.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+\(r_\text{TR}\)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_SdrReceiveFreq.w64}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The mixing frequencies \(f_r\) for all SDR channels.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+\(r_\text{TR}\)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_SdrSignalStrength.w64}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The signal's power spectral density at \(f_c\) for all SDR
+channels.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+\(r_\text{TR}\)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_DAQmxChannels.w64}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+The NI DAQ channels.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+\(r_\text{DAQ}\)\strut
+\end{minipage}\tabularnewline
+\begin{minipage}[t]{0.13\columnwidth}\raggedright\strut
+\texttt{\textless{}prefix\textgreater{}\_log.txt}\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+Overflow events and runtime errors are logged in here.\strut
+\end{minipage} & \begin{minipage}[t]{0.18\columnwidth}\raggedright\strut
+-\strut
+\end{minipage}\tabularnewline
+\bottomrule
+\end{longtable}
+
+\subsubsection{}\label{section}
+
+If the \emph{Split recording files} option is selected in the GUI, the
+W64 files are numbered (format:
+\texttt{\textless{}filename\textgreater{}.\textless{}i\_split\textgreater{}.w64},
+where \texttt{\textless{}i\_split\textgreater{}} starts at zero). The
+sample precision is \texttt{float32} by default. This can be changed to
+\texttt{int16} in \texttt{recorder.m}.
+
+\subsection{Clock Synchronization}\label{clock-synchronization}
+
+SDR Birdrec records from two distinct devices (SDR and NI DAQ). As
+Windows is no realtime operating system, it can not be guaranteed that
+the two recordings are started at the exact same time, when they are
+triggered with a software command. Furthermore, by default the two
+devices are clocked from their own internal oscillators, which are of
+limited accuracy. Hence, even if the recordings are started at the exact
+same time, the recordings will get out of synchronizations after a
+while. This makes signal analysis difficult, as well-timed events appear
+to happen at different instances of time in the two recordings.
+
+To get synchronization between the devices the two recordings must be
+triggerd with a physical signal and the clock of the devices must be
+derived from a common reference clock. Recordings on NI DAQ devices are
+internally triggered with physical trigger (rising flank), this signal
+can be routed to a
+\href{http://zone.ni.com/reference/en-XX/help/370466AE-01/TOC18.htm}{PFI
+terminal}. USRP radios have a
+\href{https://files.ettus.com/manual/page_sync.html}{PPS input}, a
+recording on these devices can be triggered with a rising flank on this
+terminal. Hence, to ensure that the recordings are started at the same
+time, configure the \emph{DAQmx trigger output terminal} and select the
+\emph{Start SDR on external trigger} option in the GUI and connect the
+two terminals with a wire.
+
+USRP radios and most NI DAQ devices can be configured to synchronize
+their internal clock to an external 10 MHz clock signal. To enable clock
+synchronization select the \emph{Enable external clock input on SDR}
+option and \emph{Enable external clock input in DAQmx} option in the GUI
+and connect the reference clock signal to the respective terminal on the
+SDR and to the configrable \emph{Clk input terminal} on the NI DAQ
+device. There exists dedicated hardware to generate and distribute such
+reference clock signals (e.g.
+\href{https://www.ettus.com/product/details/OctoClock-G}{this device}).
+Alternatively, a function generator may be used, to which the SDR and NI
+DAQ device are connected in parallel.
+
+\subsection{GUI overview}\label{gui-overview}\selectlanguage{english}
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=1.00\columnwidth]{figures/SdrBirdrecScreenshot/SdrBirdrecScreenshot}
+\caption{{SDR Birdrec GUI
+{\label{107300}}%
+}}
+\end{center}
+\end{figure}
+
+Figure \ref{107300} shows the GUI of SDR Birdrec. The bottom left plot shows the radio spectrum in real-time. The purple and yellow colored zones indicate the channel bands as configured in the channel list. The red lines show the mixing frequency \(f_r\) for each channel. The plot on the right side shows the spectrogram for a selectable  demodulated channel. In the following table a description of each setting is given:
+
+\begin{tabular}{|l|p{15cm}|}
+\hline
+\textbf{Setting Name} & \textbf{Description} \\
+\hline
+Output Folder & The path on which the output files are saved. \\
+Output Filename & The prefix of the output files. \\
+Split recording files & Automatically stop and restart the recording each \(x\) minutes. The recordings are not continuous, there is a break of a couple of seconds between each of them. \\
+SDR Sample Rate (MHz) & The SDR sample rate \(f_\text{HF}\). \\
+SDR Center Freq.\ (MHz) & The frequency to which the SDR is tuned. \\
+Select SDR device & Opens a window where an SDR device can be selected from a list of all discovered devices. \\
+Radio channel list & Opens a window where the SDR channels can be defined (channel name and channel band for each SDR channel). \\
+Start SDR on external trigger & Start SDR recording on a rising flank on the PPS terminal. \\
+Enable external clock input on SDR & Lock the SDR's internal clock to the 10 MHz reference clock signal. \\
+No.\ DAQmx channels & The number of DAQ channels you want to record. This number must match the \textit{DAQmx channel list}.\\
+DAQmx channel list & A list of analog DAQ channels in the syntax described \href{http://zone.ni.com/reference/en-XX/help/370466AC-01/mxcncpts/physchannames/}{here}.  \\
+DAQmx term. config. & The \href{http://zone.ni.com/reference/en-XX/help/370466AE-01/measfunds/connectaisigs/}{terminal configuration} of the analog DAQ channels. \\
+Max. voltage & Configures the voltage range of the ADC in the DAQ device to \([-x,x]\) volts. \\
+DAQmx trigger output terminal & The name of the PFI terminal on the DAQ, where the start trigger is exported. Use the syntax described  \href{http://zone.ni.com/reference/en-XX/help/370466AF-01/mxcncpts/termnamesyntax/}{here}. \\
+Enable antialiasing filter & Enables an internal antialiasing filter for the DAQ channels (most DAQ devices do not support this). \\
+Enable external clock input in DAQmx & Lock the DAQ's internal clock to the 10 MHz reference clock signal connected to \textit{Clk input terminal}. \\
+AGC & Enable automatic tuner gain control (\textit{AGC}) on the SDR. \\
+Tuner Gain (dB) & The tuner gain on the SDR if \textit{AGC} is turned off. \\
+UDP Trigger & Send a UDP message shortly before the start and shortly after the stop of each recording to \textit{IP:Port}. \\
+Start Recording & Start a new recording. \\
+Stop Recording & Stop a recording. \\
+\hline
+\end{tabular}
+\bigskip \bigskip
+
+In the frame labeled with \textit{Monitor} the audio output and the spectrogram plot can be controlled. The audio output is automatically interrupted if the signal level of a SDR channel is below \textit{Squelch level}. The fields \textit{Scaling} and \textit{Offset} control the appeareance of the spectrogram.
+
+\selectlanguage{english}
+\FloatBarrier
+\bibliographystyle{plainnat}
+\bibliography{bibliography/converted_to_latex.bib%
+}
+
+\end{document}
+

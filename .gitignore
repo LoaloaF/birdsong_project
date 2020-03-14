@@ -1,0 +1,10 @@
+__pycache__
+data/
+plots/
+
+pyAudioAnalysis
+
+*.csv
+
+.ipynb_checkpoints
+.vscode/
