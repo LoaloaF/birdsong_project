@@ -16,35 +16,40 @@ import time
 data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
 
 # `data` serves as a general purpose container for a specfic recording
-data_keys = 'index', 'audios', 'sample_rates', 'x_data', 'channel_list'
-data = {key: [] for key in data_keys}
+# the keys refer to the kind of data
+# for each datatype, the elements for this key correspond to the 5 files per recording
+data_keys = 'index', 'audios', 'x_data', 'sample_rates'
+data = {key: [None, None, None, None, None] for key in data_keys}
+# sliced versions of the core original data, set in `pick_plot_limits`
+data_sliced = {key: [None, None, None, None, None] for key in ['audios_sl', 'x_data_sl']}
+# 5th file per recording `channel_list.csv` saved seperately
+channel_list = None
 
-# sliced versions of the original data, set in `pick_plot_limits`
-data_sliced = {key: [[], [], [], [], []] for key in ['audios_sl', 'x_data_sl']}
 
 def pick_rec_no(interactive=True):
     def _pick_rec_no(rec_no):
         print('Reading and formatting data... ', end='')
 
         rec_files = data_files.loc[rec_no,:]
-        for i, f in enumerate(rec_files.values):
-            if f.endswith('.w64'):
-                audio, sr = sf.read(f)
-                
-                # names of filetype
-                data['index'].append(rec_files.index[i])
-                # actual data
-                data['audios'].append(audio)
-                # sample rates (int value in Hz)
-                data['sample_rates'].append(sr)
-                # norm y axis to seconds by dividing by the samplerate
-                data['x_data'].append(np.arange(len(audio))/sr) 
+        audio_rec_files = rec_files.where(rec_files.str.contains('.w64')).dropna()
+        for i, f in enumerate(audio_rec_files.values):
+            audio, sr = sf.read(f)
+
+            # names of filetype
+            data['index'][i] = rec_files.index[i]
+            # actual data
+            data['audios'][i] = audio
+            # norm y axis to seconds by dividing by the samplerate
+            data['x_data'][i] = np.arange(len(audio))/sr
+            # sample rates (int value in Hz)
+            data['sample_rates'][i] = sr
         # read in the channel list csv 
-        data['channel_list'] = pd.read_csv(rec_files.SdrChannelList, index_col='channel_number')
+        global channel_list
+        channel_list = pd.read_csv(rec_files.SdrChannelList, index_col='channel_number')
 
         print('Done.')
         print('Length of the selected recording `{}`: {} min'.format(rec_no, int(data['x_data'][0][-1]/60)))
-    
+
     if interactive:
         interact(_pick_rec_no,
                 rec_no=widgets.Dropdown(
@@ -60,19 +65,23 @@ def pick_plot_limits(interactive=True):
         start *= 60
         if start+length > data['x_data'][0][-1]:
             print('Length exceeds file length. Change `start` or `length`.')
+            return
             
             
         # iterate over the 5 filetypes, slice each individually, because sample rates differ
         for i in range(5):
             # x_data depends on the sample rate, therefore the index is always recalculated
             from_idx = np.argmax(data['x_data'][i] > start)
-            to_idx = np.argmax(data['x_data'][i] > start+length)
+            to_idx = np.argmax(data['x_data'][i] >= start+length)
             # slice all audios and x_data to the time interval
             data_sliced['audios_sl'][i] = data['audios'][i][from_idx:to_idx]
             data_sliced['x_data_sl'][i] = data['x_data'][i][from_idx:to_idx]
+        print('Start: {:.2f}s - End: {:.2f}s'.format(data_sliced['x_data_sl'][0][0], 
+                                                     data_sliced['x_data_sl'][0][-1]))
 
     if interactive:
-        interact(_pick_plot_limits,
+        widgets.interact_manual.opts['manual_name'] = 'Update time interval'
+        interact_manual(_pick_plot_limits,
                         start=widgets.FloatSlider(
                             value=0,
                             min=0,
@@ -80,7 +89,7 @@ def pick_plot_limits(interactive=True):
                             step=0.01,
                             description='Start in minutes',
                             style={'description_width': 'initial'},
-                            continuous_update=True), 
+                            continuous_update=False), 
                         length=widgets.FloatSlider(
                             value=10.0,
                             min=.1,
@@ -88,7 +97,7 @@ def pick_plot_limits(interactive=True):
                             step=.1,
                             description='Length in seconds',
                             style={'description_width': 'initial'},
-                            continuous_update=True)
+                            continuous_update=False)
                         )
     else:
         _pick_plot_limits(0, 30)
@@ -111,7 +120,6 @@ def spectrogram(interactive=True):
             audio = data_sliced['audios_sl'][i]
             samplerate = data['sample_rates'][i]
             x_data = data_sliced['x_data_sl'][i]
-            channel_list = data['channel_list']
             index = data['index'][i]
             # expand array with only one channel (DAQmx) to enable column iteration 
             if audio.ndim == 1:
