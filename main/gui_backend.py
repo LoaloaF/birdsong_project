@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import soundfile as sf
-import time
+import datetime
 
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
@@ -100,10 +100,10 @@ def pick_plot_limits(interactive=True):
                             continuous_update=False)
                         )
     else:
-        _pick_plot_limits(0, 30)
+        _pick_plot_limits(1, 30)
 
 def spectrogram(interactive=True):
-    def _spectrogram(vmin=-150, vmax=-20):
+    def _spectrogram(vmin=-150, vmax=-20, xunit='seconds'):
         plt.ioff()
         # sizes of indiviual plots (in ratios of 1)
         ratio = {'width_ratios': [.8],
@@ -165,9 +165,6 @@ def spectrogram(interactive=True):
                             
                 # last plot: set xaxis labels and draw seconds colorbar
                 elif which_ax == 8:
-                    ax.set_xlabel('time in [seconds]', size=13)
-                    ax.tick_params(labelbottom=True)
-                
                     at = (0.75, .42, .2, .015)
                     cb = ax.figure.colorbar(im, cax=fig.add_axes(at), alpha =.3,
                                     orientation='horizontal')
@@ -175,12 +172,19 @@ def spectrogram(interactive=True):
                     cb.ax.get_xaxis().set_label_position('top')
                 
                     # adjust xaxis
+                    ax.set_xlabel('time in [{}]'.format(xunit), size=13)
+                    ax.tick_params(labelbottom=True)
                     # extremely hacky... I don't know how to shift the spectrogram in x - always starts at x=0
                     # the actual axis is not changed to scale! only the labels are changed
-                    if which_ax == 8:
-                        length = x_data[-1]-x_data[0]
-                        ax.set_xlim(0, length)
-                        ax.set_xticklabels([f'{true_tick+x_data[0]:.2f}' for true_tick in ax.get_xticks()])
+                    length = x_data[-1]-x_data[0]
+                    ax.set_xlim(0, length)
+                    lbls = [true_tick+x_data[0] for true_tick in ax.get_xticks()]
+                    if xunit == 'minutes':
+                        lbls = ['{:.0f}:{:.0f}'.format(*divmod(lbl, 60)) for lbl in lbls]
+                    else:
+                        lbls = ['{:.2f}'.format(lbl) for lbl in lbls]
+                    ax.set_xticklabels(lbls)
+                
                 which_ax += 1
         print('New spectrogram generated. Run cell below to show!')
 
@@ -200,10 +204,17 @@ def spectrogram(interactive=True):
                             max=300,
                             description='Amplitude range: Max',
                             style={'description_width': 'initial'},
-                            continuous_update=False), 
+                            continuous_update=False),
+                        xunit=widgets.RadioButtons(
+                              options=['seconds', 'minutes'],
+                              value='seconds', # Defaults to 'pineapple'
+                              style={'description_width': 'initial'},
+                            #   layout={'width': 'max-content'}, # If the items' names are long
+                              description='X axis unit',
+                              disabled=False)
                         )
     else:
-        _spectrogram()
+        _spectrogram(xunit='minutes')
 
 def animate_spectrogram(resolution):
     fig = plt.gcf()
