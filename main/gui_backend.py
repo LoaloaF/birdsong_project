@@ -3,6 +3,7 @@ import numpy as np
 import soundfile as sf
 import datetime
 
+from matplotlib.dates import date2num
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.animation import FuncAnimation
@@ -26,7 +27,7 @@ data_sliced = {key: [None, None, None, None, None] for key in ['audios_sl', 'x_d
 channel_list = None
 
 
-def pick_rec_no(interactive=True):
+def pick_rec_no(interactive=True, rec_no=3):
     def _pick_rec_no(rec_no):
         print('Reading and formatting data... ', end='')
 
@@ -52,21 +53,20 @@ def pick_rec_no(interactive=True):
 
     if interactive:
         interact(_pick_rec_no,
-                rec_no=widgets.Dropdown(
+                 rec_no=widgets.Dropdown(
                     options=sorted(data_files.index.unique()),
                     description='Recording you want to explore',
                     style={'description_width': 'initial'})
                 )
     else:
-        _pick_rec_no(3)
+        _pick_rec_no(rec_no)
     
-def pick_plot_limits(interactive=True):
+def pick_plot_limits(interactive=True, start=0, length=15):
     def _pick_plot_limits(start, length):
         start *= 60
         if start+length > data['x_data'][0][-1]:
             print('Length exceeds file length. Change `start` or `length`.')
-            return
-            
+            return None if interactive else exit()
             
         # iterate over the 5 filetypes, slice each individually, because sample rates differ
         for i in range(5):
@@ -83,7 +83,7 @@ def pick_plot_limits(interactive=True):
         widgets.interact_manual.opts['manual_name'] = 'Update time interval'
         interact_manual(_pick_plot_limits,
                         start=widgets.FloatSlider(
-                            value=0,
+                            value=start,
                             min=0,
                             max=data['x_data'][0][-1]/60,
                             step=0.01,
@@ -91,7 +91,7 @@ def pick_plot_limits(interactive=True):
                             style={'description_width': 'initial'},
                             continuous_update=False), 
                         length=widgets.FloatSlider(
-                            value=10.0,
+                            value=length,
                             min=.1,
                             max=data['x_data'][0][-1],
                             step=.1,
@@ -100,10 +100,10 @@ def pick_plot_limits(interactive=True):
                             continuous_update=False)
                         )
     else:
-        _pick_plot_limits(1, 30)
+        _pick_plot_limits(start, length)
 
-def spectrogram(interactive=True):
-    def _spectrogram(vmin=-150, vmax=-20, xunit='seconds'):
+def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
+    def _spectrogram(vmin, vmax, xunit):
         plt.ioff()
         # sizes of indiviual plots (in ratios of 1)
         ratio = {'width_ratios': [.8],
@@ -174,16 +174,21 @@ def spectrogram(interactive=True):
                     # adjust xaxis
                     ax.set_xlabel('time in [{}]'.format(xunit), size=13)
                     ax.tick_params(labelbottom=True)
-                    # extremely hacky... I don't know how to shift the spectrogram in x - always starts at x=0
-                    # the actual axis is not changed to scale! only the labels are changed
-                    length = x_data[-1]-x_data[0]
-                    ax.set_xlim(0, length)
-                    lbls = [true_tick+x_data[0] for true_tick in ax.get_xticks()]
+                    # get the DAQmx x_data because it has the highest sample rate/ resolution 
+                    x_data = data_sliced['x_data_sl'][0]
+                    # the spectrogram always starts at 0, therefore the x_data is adjusted to also start at 0
+                    x_axis = np.round(x_data - x_data[0], 3)
+                    ax.set_xlim(0, x_axis[-1])
+
+                    # if the presented data didn't start at 0, annotate the true start
+                    if round(x_data[0], 3) != x_axis[0]:
+                        start_lbl = 'True start:\n{:0>2.0f}:{:0>2.0f} min'.format(*divmod(x_data[0], 60))
+                        ax.annotate(start_lbl, (0.13,0.05), xycoords='figure fraction', size=12)
+                        
+                    # convert                    
                     if xunit == 'minutes':
-                        lbls = ['{:.0f}:{:.0f}'.format(*divmod(lbl, 60)) for lbl in lbls]
-                    else:
-                        lbls = ['{:.2f}'.format(lbl) for lbl in lbls]
-                    ax.set_xticklabels(lbls)
+                        lbls = ['{:0>2.0f}:{:0>2.0f}'.format(*divmod(t, 60)) for t in ax.get_xticks()]
+                        ax.set_xticklabels(lbls)
                 
                 which_ax += 1
         print('New spectrogram generated. Run cell below to show!')
@@ -192,14 +197,14 @@ def spectrogram(interactive=True):
         widgets.interact_manual.opts['manual_name'] = 'Make spectrogram'
         interact_manual(_spectrogram,
                         vmin=widgets.IntSlider(
-                            value=-160,
+                            value=vmin,
                             min=-300,
                             max=300,
                             description='Amplitude range: Min',
                             style={'description_width': 'initial'},
                             continuous_update=False), 
                         vmax=widgets.IntSlider(
-                            value=-20,
+                            value=vmax,
                             min=-300,
                             max=300,
                             description='Amplitude range: Max',
@@ -207,14 +212,13 @@ def spectrogram(interactive=True):
                             continuous_update=False),
                         xunit=widgets.RadioButtons(
                               options=['seconds', 'minutes'],
-                              value='seconds', # Defaults to 'pineapple'
+                              value=xunit,
                               style={'description_width': 'initial'},
-                            #   layout={'width': 'max-content'}, # If the items' names are long
                               description='X axis unit',
                               disabled=False)
                         )
     else:
-        _spectrogram(xunit='minutes')
+        _spectrogram(vmin=vmin, vmax=vmax, xunit=xunit)
 
 def animate_spectrogram(resolution):
     fig = plt.gcf()
@@ -226,7 +230,7 @@ def animate_spectrogram(resolution):
     lines = [axes[i].axvline(0, -.1, 1.1, color='#c20000', clip_on=False) for i in (0,2,3,4)]
     # empirical rate that kinda works: comes somewhat close to real time
     x_dwnsampled = data_sliced['x_data_sl'][0][::resolution]
-    x_dwnsampled -= x_dwnsampled[0] # I feel very bad... adjusting to hacked x axis
+    x_dwnsampled -= x_dwnsampled[0] # adjusting to x axis that was normed to start at 0
     x_dwnsampled = x_dwnsampled[1:] # skip the first frame (0)
 
     animation_frame = lambda i: [line.set_xdata(i) for line in lines]
@@ -235,8 +239,8 @@ def animate_spectrogram(resolution):
 if __name__ == "__main__":
     pick_rec_no(interactive=False)
     pick_plot_limits(interactive=False)
-    spectrogram(interactive=False)
+    spectrogram(interactive=False,xunit='minutes')
 
     fig, x_dwnsampled, animation_frame = animate_spectrogram(resolution=8000)
-    an = FuncAnimation(fig, func=animation_frame, frames=x_dwnsampled, interval=1)
+    an = FuncAnimation(fig, func=animation_frame, frames=x_dwnsampled, interval=1, repeat=False)
     plt.show()
