@@ -90,7 +90,7 @@ def amplitudes():
                     for i in range(3)]
             fig.legend(handles=patches, loc='upper right', ncol=1, fontsize=13)
         ax.plot(y_data[i], audios[i], alpha=.7)
-    fig.savefig('../'+rec_no+'_amplitudes.png')
+    fig.savefig('../'+str(rec_no)+'_amplitudes.png')
 
 
 def frequencies():
@@ -122,7 +122,7 @@ def frequencies():
         ax.plot(y_data[i], audios[i])
         lbls = [str(int(lbl/1000))+' kHz' for lbl in ax.get_yticks()]
         ax.set_yticklabels(lbls)
-    fig.savefig('../'+rec_no+'_frequencies.png')
+    fig.savefig('../'+str(rec_no)+'_frequencies.png')
 
 def spectrogram():
     # sizes of indiviual plots (in ratios of 1)
@@ -188,7 +188,7 @@ def spectrogram():
                 cb.set_label('SdrSignalSrength Amplitude(?)')
                 cb.ax.get_xaxis().set_label_position('top')
             which_ax += 1
-    fig.savefig('../'+rec_no+'_spectrogram.png')
+    fig.savefig('../'+str(rec_no)+'_spectrogram.png')
 
 # save the plots in the current directory
 amplitudes()
