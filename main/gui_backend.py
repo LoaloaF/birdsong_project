@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import soundfile as sf
-import datetime
+import sounddevice as sd
+import glob
 
 from matplotlib.dates import date2num
 from matplotlib import pyplot as plt
@@ -11,73 +12,105 @@ from matplotlib.animation import FuncAnimation
 import ipywidgets as widgets
 from ipywidgets import interact, interact_manual, interactive
 
-import time
+# set the filtered data to fetch
+thr = .05
+pad = .5
+this_thr = f'min.amp.{thr:.2f}_pad.sec.{(pad):.2f}'
 
-# load dataframe with file locations
+# load dataframe with file locations, check if filtered data exists
 data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
+if glob.glob('../filt_data_files_*'):
+    filtered_data = pd.read_csv(f'../filt_data_files_{this_thr}.csv', 
+                                index_col='rec_id')
+    data_files = pd.concat([data_files, filtered_data]) # merge with standard data
 
-# `data` serves as a general purpose container for a specfic recording
-# the keys refer to the kind of data
-# for each datatype, the elements for this key correspond to the 5 files per recording
-data_keys = 'index', 'audios', 'x_data', 'sample_rates'
-data = {key: [None, None, None, None, None] for key in data_keys}
-# sliced versions of the core original data, set in `pick_plot_limits`
-data_sliced = {key: [None, None, None, None, None] for key in ['audios_sl', 'x_data_sl']}
-# 5th file per recording `channel_list.csv` saved seperately
-channel_list = None
+# init empty data containers for all the different audio-types
+data_keys = 'data', 'data_sl', 'x_ticks', 'x_ticks_sl', 'sample_rate', 'name'
+empty_data = dict().fromkeys(data_keys, None)
 
+daq, sdr = empty_data.copy(), empty_data.copy()
+sdr_carrier_freq, sdr_receiver_freq = empty_data.copy(), empty_data.copy()
+sdr_signal_strength = empty_data.copy()
+sdr_channellist = None
 
 def pick_rec_no(interactive=True, rec_no=3):
+    """
+    Fill the empty data containers defined above with one specific recording
+    or a filtered recording chunk generated in `filter_data.py`. As all the 
+    other functions in this script, one may call `pick_rec_no` with the 
+    `interactive`=False keyword to use it in a script, or as True in a jupyter 
+    notebook. 
+    """
     def _pick_rec_no(rec_no):
         print('Reading and formatting data... ', end='')
 
         rec_files = data_files.loc[rec_no,:]
-        audio_rec_files = rec_files.where(rec_files.str.contains('.w64')).dropna()
-        for i, f in enumerate(audio_rec_files.values):
-            audio, sr = sf.read(f)
+        audio_types = daq, sdr_carrier_freq, None, sdr, sdr_receiver_freq, sdr_signal_strength
+        for audio_type, (name, file) in zip(audio_types, rec_files.iteritems()):
+            # unfiltered recording selected 
+            if isinstance(rec_no, int):
+                if name not in ('SdrChannelList', 'DAQmxAudio', 'log'):
+                    ampl, sr = sf.read(file)
+                    audio_type['data'] = ampl
+                    audio_type['sample_rate'] = sr
+                    audio_type['x_ticks'] = np.arange(len(ampl))/sr
+                    audio_type['name'] = name
 
-            # names of filetype
-            data['index'][i] = rec_files.index[i]
-            # actual data
-            data['audios'][i] = audio
-            # norm y axis to seconds by dividing by the samplerate
-            data['x_data'][i] = np.arange(len(audio))/sr
-            # sample rates (int value in Hz)
-            data['sample_rates'][i] = sr
-        # read in the channel list csv 
-        global channel_list
-        channel_list = pd.read_csv(rec_files.SdrChannelList, index_col='channel_number')
+                elif name == 'SdrChannelList':
+                    global sdr_channellist
+                    sdr_channellist = pd.read_csv(file, index_col='channel_number')
+            
+            # filtered data only populates daq, sdr and sdr_channellist 
+            elif name in ('DAQmx', 'SdrChannels'):
+                ampl, sr = np.load(file), 32000 if name == 'DAQmx' else 24000
+                audio_type['data'] = ampl
+                audio_type['sample_rate'] = sr
+                audio_type['x_ticks'] = np.arange(len(ampl))/sr
+                audio_type['name'] = name
 
-        print('Done.')
-        print('Length of the selected recording `{}`: {} min'.format(rec_no, int(data['x_data'][0][-1]/60)))
-
+                # simply the first element of the unfiltered recordings
+                sdr_channellist = pd.read_csv(data_files['SdrChannelList'].iloc[0], 
+                                            index_col='channel_number')
+        
+        print('Done.\nLength of the selected recording `{}`: {} min'.format(rec_no, int(daq['x_ticks'][-1]/60)))
+        if isinstance(rec_no, str):
+            print(f'\nFiltered data selected with parameters min_amplitude: {thr}; pad_seconds: {pad}.')
+            print('To get differently filtered data edit the gui_backend.py file.')
+        
+        
     if interactive:
         interact(_pick_rec_no,
                  rec_no=widgets.Dropdown(
-                    options=sorted(data_files.index.unique()),
+                    options=data_files.index.unique(),
                     description='Recording you want to explore',
-                    style={'description_width': 'initial'})
+                    style={'description_width': 'initial'}),
                 )
     else:
         _pick_rec_no(rec_no)
-    
+
 def pick_plot_limits(interactive=True, start=0, length=15):
+    """
+    Slice the recording to a user-selected time interval. Sliced versions
+    of `data` (`data_sl`) and `x_ticks`(`x_ticks_sl`) are saved in the 
+    all the dictionaries  daq, sdr, sdr_carrier_freq...
+    """
     def _pick_plot_limits(start, length):
         start *= 60
-        if start+length > data['x_data'][0][-1]:
+        if start+length > daq['x_ticks'][-1]:
             print('Length exceeds file length. Change `start` or `length`.')
             return None if interactive else exit()
             
-        # iterate over the 5 filetypes, slice each individually, because sample rates differ
-        for i in range(5):
-            # x_data depends on the sample rate, therefore the index is always recalculated
-            from_idx = np.argmax(data['x_data'][i] > start)
-            to_idx = np.argmax(data['x_data'][i] >= start+length)
-            # slice all audios and x_data to the time interval
-            data_sliced['audios_sl'][i] = data['audios'][i][from_idx:to_idx]
-            data_sliced['x_data_sl'][i] = data['x_data'][i][from_idx:to_idx]
-        print('Start: {:.2f}s - End: {:.2f}s'.format(data_sliced['x_data_sl'][0][0], 
-                                                     data_sliced['x_data_sl'][0][-1]))
+        for audio_type in (daq, sdr, sdr_carrier_freq, sdr_receiver_freq, sdr_signal_strength):
+            if audio_type['data'] is not None:
+                # x_ticks depends on the specifc sample rate of the data, thus the index is always recalculated
+                from_idx = np.argmax(audio_type['x_ticks'] > start)
+                to_idx = np.argmax(audio_type['x_ticks'] >= start+length)
+                # slice all audios and x_data to the time interval
+                audio_type['data_sl'] = audio_type['data'][from_idx:to_idx]
+                audio_type['x_ticks_sl'] = audio_type['x_ticks'][from_idx:to_idx]
+
+        print('Start: {:.2f}s - End: {:.2f}s'.format(daq['x_ticks_sl'][0], 
+                                                     daq['x_ticks_sl'][-1]))
 
     if interactive:
         widgets.interact_manual.opts['manual_name'] = 'Update time interval'
@@ -85,7 +118,7 @@ def pick_plot_limits(interactive=True, start=0, length=15):
                         start=widgets.FloatSlider(
                             value=start,
                             min=0,
-                            max=data['x_data'][0][-1]/60,
+                            max=daq['x_ticks'][-1]/60,
                             step=0.01,
                             description='Start in minutes',
                             style={'description_width': 'initial'},
@@ -93,7 +126,7 @@ def pick_plot_limits(interactive=True, start=0, length=15):
                         length=widgets.FloatSlider(
                             value=length,
                             min=.1,
-                            max=data['x_data'][0][-1],
+                            max=daq['x_ticks'][-1],
                             step=.1,
                             description='Length in seconds',
                             style={'description_width': 'initial'},
@@ -103,94 +136,90 @@ def pick_plot_limits(interactive=True, start=0, length=15):
         _pick_plot_limits(start, length)
 
 def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
+    """
+    Draw a spectrogram for the selected recording. The produced figure 
+    is split into 3 subplots, the amplitude of DAQmx, the spectrogram of
+    DAQmx and the spectrogram of the Sdr data (split into 3 channels mic, 
+    bird1, bird2) (top to bottom). 
+    """
     def _spectrogram(vmin, vmax, xunit):
         plt.ioff()
         # sizes of indiviual plots (in ratios of 1)
         ratio = {'width_ratios': [.8],
-                'height_ratios': [.12, .06, .12, .12, .12, .10, .12, .12, .12]}
+                'height_ratios': [.24, .08, .24, .08, .12, .12, .12]}
         # init figure
-        fig, axes = plt.subplots(figsize=(14,10), nrows=9, ncols=1, sharex=True, 
+        fig, axes = plt.subplots(figsize=(14,10), nrows=7, ncols=1, sharex=True, 
                                  sharey=False, gridspec_kw=ratio)
         fig.subplots_adjust(hspace=0, right=.96, top=.9, left=.16)
 
-        # iterate the 3 audio data files: SdrChannels, SdrSignalStrength, DAQmxChannels
-        which_ax = 0
-        for i in [0,2,4]:
-            # get the data for the current audio file 
-            audio = data_sliced['audios_sl'][i]
-            samplerate = data['sample_rates'][i]
-            x_data = data_sliced['x_data_sl'][i]
-            index = data['index'][i]
-            # expand array with only one channel (DAQmx) to enable column iteration 
-            if audio.ndim == 1:
-                audio = np.expand_dims(audio, axis=1)
+        for which_ax, ax in enumerate(axes.flatten()):
+            if which_ax in [1, 3]:
+                ax.set_visible(False)
+                continue
 
-            # iterate channels mic, backpack1 ,backpack2
-            for channel_lbl, channel in zip(channel_list.bird_name.values, audio.T):
-                # set current axis
-                ax = axes[which_ax]
-                # set axis 1 and 5 as spacers, ie. set invisible 
-                if which_ax in [1, 5]:
-                    ax.set_visible(False)
-                    which_ax += 1
-                    ax = axes[which_ax]
+            # setup y axis labels, tick parameters
+            ax.tick_params(labelleft=False, left=False, right=True, labelright=True, labelbottom=False)
+            if which_ax in [0, 2, 4]:
+                if which_ax == 0:
+                    title = 'DAQmx Amplitude'
+                elif which_ax == 2:
+                    title = 'DAQmx spectrogram'
+                elif which_ax == 4:
+                    title = 'Sdr Spectrogram'
+                ax.set_title(title, loc='left', pad=4)
+            if which_ax in (4,5,6):
+                ax.set_ylabel(sdr_channellist.bird_name[which_ax-4], 
+                              rotation='horizontal', size=11, ha='right')
 
-                # setup y axis labels, tick parameters
-                ax.tick_params(labelleft=False, left=False, right=True, labelright=True, labelbottom=False)
-                if which_ax in [0, 2, 6]:
-                    ax.set_title(index, loc='left', pad=4)
-                ax.set_ylabel(channel_lbl, rotation='horizontal', size=11, ha='right')
-                # the SdrSignalStrength is on a very different scale. Maybe map signal strengths from CSV to values here? 
-                # for now don't change the y axis labeling for the last 3 plots
-                if which_ax < 6:
-                    yticks = [2000, 4000, 6000, 8000, 10000]
-                    ytick_lbls = [str(int(yt/1000)) + 'kHz' for yt in yticks]
-                    ax.set_yticks(yticks)
-                    ax.set_yticklabels(ytick_lbls, size=8)
-                
-                # draw spectrogram, set range for DAQmx & SdrChanels different to the one of SdrSignalStrength
-                if i not in (0, 2):
-                    vmin, vmax = [-25,25]
-                spec, freqs, t, im = axes[which_ax].specgram(channel, Fs=samplerate, alpha=.9, cmap='jet', scale='dB',
-                                                             vmin=vmin, vmax=vmax)
+            # amplitude plot
+            if which_ax == 0:
+                ax.set_facecolor('#ededed')
+                ax.yaxis.grid(color='w', linewidth=2, alpha=.6)
+                x = daq['x_ticks_sl'] -daq['x_ticks_sl'][0] # norm to start at 0
+                ax.plot(x, daq['data_sl'], alpha=.7)
+                ax.tick_params(left=True, labelleft=True, right=True, labelright=True)
+                ax.set_ylabel('[dB]')
+            # two spectrograms
+            else:
+                yticks = [2000, 4000, 6000, 8000, 10000]
+                ytick_lbls = [str(int(yt/1000)) + 'kHz' for yt in yticks]
+                ax.set_yticks(yticks)
+                ax.set_yticklabels(ytick_lbls, size=8)
+                # draw spectrogram
+                if which_ax == 2:
+                    channel, sr = daq['data_sl'], daq['sample_rate']
+                else:
+                    channel, sr = sdr['data_sl'][:, which_ax-4], sdr['sample_rate']
+                _, _, _, im = ax.specgram(channel, Fs=sr, alpha=.9, cmap='jet', scale='dB',
+                                          vmin=vmin, vmax=vmax)
 
-                # first plot: draw the colorbar
-                if not i:
-                    fig.suptitle('Spectrogram (amplitude per frequency plot)', size=16)
-                    at = (0.75, .94, .2, .015)
-                    cb = ax.figure.colorbar(im, cax=fig.add_axes(at), alpha =1,
-                                    orientation='horizontal')
-                    cb.set_label('DAQmx & SdrChanels Amplitude(?)')
-                    cb.ax.get_xaxis().set_label_position('top')
-                            
-                # last plot: set xaxis labels and draw seconds colorbar
-                elif which_ax == 8:
-                    at = (0.75, .42, .2, .015)
-                    cb = ax.figure.colorbar(im, cax=fig.add_axes(at), alpha =.3,
-                                    orientation='horizontal')
-                    cb.set_label('SdrSignalSrength Amplitude(?)')
-                    cb.ax.get_xaxis().set_label_position('top')
-                
-                    # adjust xaxis
-                    ax.set_xlabel('time in [{}]'.format(xunit), size=13)
-                    ax.tick_params(labelbottom=True)
-                    # get the DAQmx x_data because it has the highest sample rate/ resolution 
-                    x_data = data_sliced['x_data_sl'][0]
-                    # the spectrogram always starts at 0, therefore the x_data is adjusted to also start at 0
-                    x_axis = np.round(x_data - x_data[0], 3)
-                    ax.set_xlim(0, x_axis[-1])
-
-                    # if the presented data didn't start at 0, annotate the true start
-                    if round(x_data[0], 3) != x_axis[0]:
-                        start_lbl = 'True start:\n{:0>2.0f}:{:0>2.0f} min'.format(*divmod(x_data[0], 60))
-                        ax.annotate(start_lbl, (0.13,0.05), xycoords='figure fraction', size=12)
+            # first plot: draw the colorbar
+            if which_ax == 2:
+                fig.suptitle('Spectrogram (frequency-densities)', size=16)
+                at = (0.75, .94, .2, .015)
+                cb = ax.figure.colorbar(im, cax=fig.add_axes(at), alpha =1,
+                                orientation='horizontal')
+                cb.set_label('Amplitude')
+                cb.ax.get_xaxis().set_label_position('top')
                         
-                    # convert                    
-                    if xunit == 'minutes':
-                        lbls = ['{:0>2.0f}:{:0>2.0f}'.format(*divmod(t, 60)) for t in ax.get_xticks()]
-                        ax.set_xticklabels(lbls)
-                
-                which_ax += 1
+            # last plot: set xaxis labels and draw seconds colorbar
+            elif which_ax == 6:
+                ax.set_xlabel('time in [{}]'.format(xunit), size=13)
+                ax.tick_params(labelbottom=True)
+                # get the DAQmx x_data because it has the highest sample rate/ resolution 
+                # the spectrogram always starts at 0, therefore the x_data is adjusted to also start at 0
+                x_axis = np.round(daq['x_ticks_sl'] - daq['x_ticks_sl'][0], 3)
+                ax.set_xlim(0, x_axis[-1])
+
+                # if the presented data didn't start at 0, annotate the true start
+                if round(daq['x_ticks_sl'][0], 3) != daq['x_ticks_sl'][0]:
+                    start_lbl = 'True start:\n{:0>2.0f}:{:0>2.0f} min'.format(*divmod(daq['x_ticks_sl'][0], 60))
+                    ax.annotate(start_lbl, (0.13,0.05), xycoords='figure fraction', size=12)
+                    
+                # convert                    
+                if xunit == 'minutes':
+                    lbls = ['{:0>2.0f}:{:0>2.0f}'.format(*divmod(t, 60)) for t in ax.get_xticks()]
+                    ax.set_xticklabels(lbls)
         print('New spectrogram generated. Run cell below to show!')
 
     if interactive:
@@ -221,15 +250,19 @@ def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
         _spectrogram(vmin=vmin, vmax=vmax, xunit=xunit)
 
 def animate_spectrogram(resolution):
+    """
+    This function draws 3 vertical red lines onto the plot and returns a.o. 
+    a function to update the x position of those lines.  
+    """
     fig = plt.gcf()
     axes = fig.axes
     if not axes:
         raise Exception('No spectrogram generated. Press button above.')
-
+    
     # animation
-    lines = [axes[i].axvline(0, -.1, 1.1, color='#c20000', clip_on=False) for i in (0,2,3,4)]
+    lines = [axes[ax].axvline(0, -.1, 1.1, color='#c20000', clip_on=False) for ax in [0,2,4,5,6]]
     # empirical rate that kinda works: comes somewhat close to real time
-    x_dwnsampled = data_sliced['x_data_sl'][0][::resolution]
+    x_dwnsampled = daq['x_ticks_sl'][::resolution]
     x_dwnsampled -= x_dwnsampled[0] # adjusting to x axis that was normed to start at 0
     x_dwnsampled = x_dwnsampled[1:] # skip the first frame (0)
 
@@ -237,10 +270,15 @@ def animate_spectrogram(resolution):
     return fig, x_dwnsampled, animation_frame
 
 if __name__ == "__main__":
-    pick_rec_no(interactive=False)
-    pick_plot_limits(interactive=False)
-    spectrogram(interactive=False,xunit='minutes')
-
-    fig, x_dwnsampled, animation_frame = animate_spectrogram(resolution=8000)
-    an = FuncAnimation(fig, func=animation_frame, frames=x_dwnsampled, interval=1, repeat=False)
+    pick_rec_no(interactive=False, rec_no='00-06')  # select recording
+    pick_plot_limits(interactive=False, start=1.15, length=23)  # slice the data
+    spectrogram(interactive=False,xunit='minutes')  # draw the spectrogram
+    
+    # adjust the resolution value if the red line and audio are out of sync
+    # increase if the red line is lacking behind the sound/ too slow
+    # decrease if the red line is before the sound/ too fast
+    fig, x_dwnsampled, animation_frame = animate_spectrogram(resolution=6500)   # draw the lines  
+    an = FuncAnimation(fig, func=animation_frame, frames=x_dwnsampled, interval=1, repeat=False) # animate the lines
+    sd.play(daq['data_sl'], daq['sample_rate']) # play the sound corresponding to the spectrogram
+    
     plt.show()

@@ -1,3 +1,6 @@
+"""
+2. Generate filtered data by mergeing chunks of recordings and filtering them by amplitude.
+"""
 import pandas as pd
 import numpy as np
 import soundfile as sf
@@ -7,10 +10,22 @@ from sklearn import preprocessing
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
 
+import os
 from pathlib import Path
+from glob import glob
 
 
 def filter_audio(threshold, pad, chunk, save_wav_file=False):
+    """
+    Merge the recordings passed in chunks to one large recording. Filter the
+    the DAQmx data according to the defined parameters `thr, and `pad`. `thr` 
+    defines the minimally required amplitude, `pad` the seconds to include after 
+    and before a sufficiently high audio frame. This makes the audio file still 
+    interpretable (listening to it) by providing context. The audio frames that 
+    pass the threshold form as mask that is used to filter the Sdr data.
+    Save the mic and sdr data in as .npy files in data/filtered/. Optionally, 
+    also save a .wav file of the DAQmx data. 
+    """
     start, stop = chunk
     pad *= sr
     print(f'Processing recordings {start} to {stop}...')
@@ -60,26 +75,49 @@ def filter_audio(threshold, pad, chunk, save_wav_file=False):
     audio_sl = audio_data[audio_mask]
 
     Path("../data/filtered").mkdir(exist_ok=True)
-    np.save(f'../data/filtered/DAQmx_filtered_{start}_{stop}', audio_sl)
-    np.save(f'../data/filtered/Sdr_filtered_{start}_{stop}', sdr_sl)
+    np.save(f'../data/filtered/DAQmx_{start:0>2d}-{stop:0>2d}_{this_thr}', audio_sl)
+    np.save(f'../data/filtered/Sdr_{start:0>2d}-{stop:0>2d}_{this_thr}', sdr_sl)
     if save_wav_file:
-        sf.write(f'../data/filtered/audio_filtered_{start}_{stop}.wav', audio_sl, sr)
+        sf.write(f'../data/filtered/audio_{start:0>2d}-{stop:0>2d}_{this_thr}.wav', audio_sl, sr)
 
     return audio_sl, sdr_sl
+
+def make_filtered_data_files_csv():
+    """
+    Save a file-lookup .csv equivalent to `data_files.csv` as 
+    `./filt_data_files_min.amp.*_pad.sec.*.csv. Asterisks are 
+    replaced by thresholds and pads used.
+    """
+    files = glob(f'../data/filtered/*{this_thr}*')
+    index = [f[f.find('_')+1 :f.find('_', f.find('_')+1)] for f in files]
+    index = pd.Index(index, name='rec_id').drop_duplicates()
+    
+    cols = ['DAQmx', 'SdrChannels', 'DAQmxAudio']
+    data = dict()
+    data[cols[0]] = [f for f in files if 'DAQmx' in f] # mic data
+    data[cols[1]] = [f for f in files if 'Sdr' in f] # Sdr data
+    data[cols[2]] = [f for f in files if 'audio' in f] # audio
+
+    data = pd.DataFrame(data, index=index)
+    fname = f'../filt_data_files_{this_thr}.csv'
+    data.to_csv(fname)
+    print(f'{fname} - created and saved successfully.')
 
 # load dataframe with file locations
 data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
 sr = 32000      # mic data sample rate
 
 # the recordings interval to glue together into one filtered file
-chunks = [(0, 6), (6, 13), (13, 16), (16, 19), (19, 22), (22, 25), (25, 29), (29, 31)]
+chunks = [(0, 6), (6,13), (13, 16), (16, 19), (19, 22), (22, 25), (25, 29), (29, 31)]
 
-# minimum amplitude
-thr = .05
-# seconds to include before and after an above-threshold amplitude
-pad = .5
+thr = .05 # minimum amplitude
+pad = .5 # seconds to include before and after an above-threshold amplitude
+this_thr = f'min.amp.{thr:.2f}_pad.sec.{(pad):.2f}'
 
-# this will tike quite some time and storage. You can also just check out chunk 1, 0-6, which is used in the gui.
+# this will tike quite some time and storage. Adjust chunks if necessary
+print(f'Used threshold paramers: {this_thr}')
 for i, chunk in enumerate(chunks):
     print(f'{i+1}/{len(chunks)}:  ', end='')
     audio_sl, sdr_sl = filter_audio(thr, pad, chunk, save_wav_file=True)
+
+make_filtered_data_files_csv()

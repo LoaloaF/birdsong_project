@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
 import soundfile as sf
-import sounddevice as sd
-import glob
+import datetime
 
 from matplotlib.dates import date2num
 from matplotlib import pyplot as plt
@@ -11,6 +10,8 @@ from matplotlib.animation import FuncAnimation
 
 import ipywidgets as widgets
 from ipywidgets import interact, interact_manual, interactive
+
+import time
 
 # load dataframe with file locations
 data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
@@ -25,10 +26,9 @@ data_sliced = {key: [None, None, None, None, None] for key in ['audios_sl', 'x_d
 # 5th file per recording `channel_list.csv` saved seperately
 channel_list = None
 
-start, stop = 0, 6
 
-def pick_rec_no(interactive=True, rec_no=3, use_filterd=False):
-    def _pick_rec_no(rec_no, use_filterd):
+def pick_rec_no(interactive=True, rec_no=3):
+    def _pick_rec_no(rec_no):
         print('Reading and formatting data... ', end='')
 
         rec_files = data_files.loc[rec_no,:]
@@ -38,19 +38,12 @@ def pick_rec_no(interactive=True, rec_no=3, use_filterd=False):
 
             # names of filetype
             data['index'][i] = rec_files.index[i]
-
             # actual data
             data['audios'][i] = audio
-            if use_filterd and i == 0:
-                data['audios'][0] = np.load(f'../data/filtered/DAQmx_filtered_{start}_{stop}.npy')
-            if use_filterd and i == 2:
-                data['audios'][2] = np.load(f'../data/filtered/Sdr_filtered_{start}_{stop}.npy')
-
             # norm y axis to seconds by dividing by the samplerate
             data['x_data'][i] = np.arange(len(audio))/sr
             # sample rates (int value in Hz)
             data['sample_rates'][i] = sr
-        
         # read in the channel list csv 
         global channel_list
         channel_list = pd.read_csv(rec_files.SdrChannelList, index_col='channel_number')
@@ -58,20 +51,15 @@ def pick_rec_no(interactive=True, rec_no=3, use_filterd=False):
         print('Done.')
         print('Length of the selected recording `{}`: {} min'.format(rec_no, int(data['x_data'][0][-1]/60)))
 
-
     if interactive:
         interact(_pick_rec_no,
                  rec_no=widgets.Dropdown(
                     options=sorted(data_files.index.unique()),
                     description='Recording you want to explore',
-                    style={'description_width': 'initial'}),
-                 use_filterd=widgets.Checkbox(
-                     value=use_filterd,
-                     description='Use filtered data'
-                 )
+                    style={'description_width': 'initial'})
                 )
     else:
-        _pick_rec_no(rec_no, use_filterd)
+        _pick_rec_no(rec_no)
     
 def pick_plot_limits(interactive=True, start=0, length=15):
     def _pick_plot_limits(start, length):
@@ -88,7 +76,6 @@ def pick_plot_limits(interactive=True, start=0, length=15):
             # slice all audios and x_data to the time interval
             data_sliced['audios_sl'][i] = data['audios'][i][from_idx:to_idx]
             data_sliced['x_data_sl'][i] = data['x_data'][i][from_idx:to_idx]
-
         print('Start: {:.2f}s - End: {:.2f}s'.format(data_sliced['x_data_sl'][0][0], 
                                                      data_sliced['x_data_sl'][0][-1]))
 
@@ -120,7 +107,7 @@ def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
         plt.ioff()
         # sizes of indiviual plots (in ratios of 1)
         ratio = {'width_ratios': [.8],
-                'height_ratios': [.24, .06, 0, .0, .24, .10, .12, .12, .12]}
+                'height_ratios': [.12, .06, .12, .12, .12, .10, .12, .12, .12]}
         # init figure
         fig, axes = plt.subplots(figsize=(14,10), nrows=9, ncols=1, sharex=True, 
                                  sharey=False, gridspec_kw=ratio)
@@ -128,18 +115,18 @@ def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
 
         # iterate the 3 audio data files: SdrChannels, SdrSignalStrength, DAQmxChannels
         which_ax = 0
-        for i in [4,0,2]:
+        for i in [0,2,4]:
             # get the data for the current audio file 
-            samplerate = data['sample_rates'][i]
             audio = data_sliced['audios_sl'][i]
+            samplerate = data['sample_rates'][i]
             x_data = data_sliced['x_data_sl'][i]
-
+            index = data['index'][i]
             # expand array with only one channel (DAQmx) to enable column iteration 
             if audio.ndim == 1:
                 audio = np.expand_dims(audio, axis=1)
 
             # iterate channels mic, backpack1 ,backpack2
-            for channel in audio.T:
+            for channel_lbl, channel in zip(channel_list.bird_name.values, audio.T):
                 # set current axis
                 ax = axes[which_ax]
                 # set axis 1 and 5 as spacers, ie. set invisible 
@@ -151,33 +138,21 @@ def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
                 # setup y axis labels, tick parameters
                 ax.tick_params(labelleft=False, left=False, right=True, labelright=True, labelbottom=False)
                 if which_ax in [0, 2, 6]:
-                    if which_ax == 0:
-                        title = 'DAQmx Amplitude'
-                    elif which_ax == 2:
-                        title = 'DAQmx spectrogram'
-                    elif which_ax == 6:
-                        title = 'Sdr Signal'
-                    ax.set_title(title, loc='left', pad=4)
-
-                # ax.set_ylabel(channel_lbl, rotation='horizontal', size=11, ha='right')
+                    ax.set_title(index, loc='left', pad=4)
+                ax.set_ylabel(channel_lbl, rotation='horizontal', size=11, ha='right')
                 # the SdrSignalStrength is on a very different scale. Maybe map signal strengths from CSV to values here? 
                 # for now don't change the y axis labeling for the last 3 plots
-                
-                if which_ax:
+                if which_ax < 6:
                     yticks = [2000, 4000, 6000, 8000, 10000]
                     ytick_lbls = [str(int(yt/1000)) + 'kHz' for yt in yticks]
                     ax.set_yticks(yticks)
                     ax.set_yticklabels(ytick_lbls, size=8)
-                    # draw spectrogram, set range for DAQmx & SdrChanels different to the one of SdrSignalStrength
-                    spec, freqs, t, im = axes[which_ax].specgram(channel, Fs=samplerate, alpha=.9, cmap='jet', scale='dB',
-                                                                vmin=vmin, vmax=vmax)
-                else:
-                    ax.set_facecolor('#ededed')
-                    ax.yaxis.grid(color='w', linewidth=2, alpha=.6)
-                    x = data_sliced['x_data_sl'][0]-data_sliced['x_data_sl'][0][0]
-                    ax.plot(x, data_sliced['audios_sl'][0], alpha=.7)
-                    ax.tick_params(left=True, labelleft=True, right=True, labelright=True)
-                    ax.set_ylabel('[dB]')
+                
+                # draw spectrogram, set range for DAQmx & SdrChanels different to the one of SdrSignalStrength
+                if i not in (0, 2):
+                    vmin, vmax = [-25,25]
+                spec, freqs, t, im = axes[which_ax].specgram(channel, Fs=samplerate, alpha=.9, cmap='jet', scale='dB',
+                                                             vmin=vmin, vmax=vmax)
 
                 # first plot: draw the colorbar
                 if not i:
@@ -190,6 +165,12 @@ def spectrogram(interactive=True, vmin=-150, vmax=-20, xunit='minutes'):
                             
                 # last plot: set xaxis labels and draw seconds colorbar
                 elif which_ax == 8:
+                    at = (0.75, .42, .2, .015)
+                    cb = ax.figure.colorbar(im, cax=fig.add_axes(at), alpha =.3,
+                                    orientation='horizontal')
+                    cb.set_label('SdrSignalSrength Amplitude(?)')
+                    cb.ax.get_xaxis().set_label_position('top')
+                
                     # adjust xaxis
                     ax.set_xlabel('time in [{}]'.format(xunit), size=13)
                     ax.tick_params(labelbottom=True)
@@ -244,9 +225,9 @@ def animate_spectrogram(resolution):
     axes = fig.axes
     if not axes:
         raise Exception('No spectrogram generated. Press button above.')
-    
+
     # animation
-    lines = [axes[ax].axvline(0, -.1, 1.1, color='#c20000', clip_on=False) for ax in [0,4,5,6,7,8]]
+    lines = [axes[i].axvline(0, -.1, 1.1, color='#c20000', clip_on=False) for i in (0,2,3,4)]
     # empirical rate that kinda works: comes somewhat close to real time
     x_dwnsampled = data_sliced['x_data_sl'][0][::resolution]
     x_dwnsampled -= x_dwnsampled[0] # adjusting to x axis that was normed to start at 0
@@ -256,12 +237,10 @@ def animate_spectrogram(resolution):
     return fig, x_dwnsampled, animation_frame
 
 if __name__ == "__main__":
-    pick_rec_no(interactive=False, use_filterd=True)
-    pick_plot_limits(interactive=False, start=1.15, length=23)
+    pick_rec_no(interactive=False)
+    pick_plot_limits(interactive=False)
     spectrogram(interactive=False,xunit='minutes')
 
-    fig, x_dwnsampled, animation_frame = animate_spectrogram(resolution=7200)
+    fig, x_dwnsampled, animation_frame = animate_spectrogram(resolution=8000)
     an = FuncAnimation(fig, func=animation_frame, frames=x_dwnsampled, interval=1, repeat=False)
-    
-    sd.play(data_sliced['audios_sl'][0], data['sample_rates'][0])
     plt.show()

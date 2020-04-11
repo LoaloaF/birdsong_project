@@ -1,3 +1,8 @@
+"""
+1, This writes the file-lookup .csv file `./data_files.csv` from a path to 
+the folders containing the recordings. All Subsequent scripts use this 
+table to lookup file locations. 
+"""
 import pandas as pd
 from glob import glob
 
