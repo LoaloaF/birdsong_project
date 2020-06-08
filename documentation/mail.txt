@@ -1,0 +1,33 @@
+Hi Tomas,
+
+I am somewhat stuck in regard to interpreting specific data files. 
+
+There are 5 files per recording, DAQmx and SdrChannels are clear: the microphone data and the backpack data. The amplitudes of these two look reasonable too (Figure1). 
+Q1: is the microphone channel of the SdrChannels data just a copy of the DAQmx data? The general shape seems to match, but the amplitudes are lower in the Sdr one. 
+the mic channel in the SdrChannels file is from a wireless FM microphone.  The DAQmx data is from a stationary mic that has been digitized with NI DAQ digitizer (no radio transmission involved, the stationary mic has better quality then the radio mic, however it's not perfectly synchronized with the radio channels) 
+Q2 (main): What is the meaning of the SdrSignalStrength file? Why are the amplitudes predominantly in the negative range? IS this even amplitude data? Should they be used as some kind of mapping?
+The  SdrSignalStrength files record the radio channel signal strength in dB. It's basically the y coordinate of the peaks in Figure 1 in this document .
+
+
+When we generate the spectrograms for the 3 files above we get the plots in Figure 3.
+However, our frequencies are in the KHz range, while the channel_list.csv (attached) and the 2 frequency files (Figure 2) have values in the MHz range.
+The freqs in the  channel_list.csv  file are the radio band, where the radio receiver looks for the radio channels. The same for the 2 frequency files, they record radio frequencies. The  <prefix>_SdrReceiveFreq.w64  files record the x coordinate of the red lines in Fig. 1 in the Authorea document and the  <prefix>_SdrCarrierFreq.w64  files the x coordinate of the peaks respectively. The red lines track the peaks (the receiver frequency has to be in near proximity of the carrier frequency (transmitter freq.) of the backpacks.
+Q3: Why are our frequencies in the kHz range? We used the matplotlib.spectrogram function with default arguments. The amplitudes also confuse me, why are they so strictly negative (see colorbar)?
+The radio signal (MHz range) is demodulated (google 'FM demodulation') to recover the sensor signal (kHz range). The amplitudes in spectrograms are usually in dB (logarithmic amplitudes), that's why they can get negative.
+ 
+
+ 
+Q4: Do you know why the DAQmx and SdrChannels-mic differ so much (Q1)? 
+see q1 above 
+
+
+ 
+ 
+Q5: How are the two freq. files useful (Figure 2)? Should they be used to construct in Spectrogram instead of extrapolating them via the Forier-Transform inside the spectrogram function? If so, how?
+
+The can not be used to calculate the spectrogram. If they are unstable (this means that the carrier frequency of the radio transmitter is not constant) this will lead to noise in the demodulated sensor (accelerometer) signal.
+
+Hope to hear from you soon! And thanks!
+
+Cheers,
+Simon
