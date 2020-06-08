@@ -7,7 +7,7 @@ import pandas as pd
 from glob import glob
 
 # load data (change if "data" folder is not in the same folder as this file)
-path_to_data = '../data/'
+path_to_data = '/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned'
 
 days = [14, 15, 16, 18, 19]
 path_to_data = [path_to_data+'/2018-08-{}/'.format(d) for d in days]
