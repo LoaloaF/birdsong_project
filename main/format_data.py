@@ -7,7 +7,12 @@ import pandas as pd
 from glob import glob
 
 # load data (change if "data" folder is not in the same folder as this file)
+<<<<<<< HEAD
 path_to_data = '/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned'
+=======
+path_to_data = '/media/loaloa/Samsung_T5/b8p2male-b10o15female_aligned/'
+output = './../'
+>>>>>>> 05e5c60278779e5bbfe548c3fc9f8c020ef2c09a
 
 days = [14, 15, 16, 18, 19]
 path_to_data = [path_to_data+'/2018-08-{}/'.format(d) for d in days]
@@ -36,4 +41,4 @@ for filetype in data_files.columns:
 
 # write a csv table to easily index the files you need
 # load this table with pd.read_csv('./data_files.csv', index_col='rec_id')
-data_files.to_csv('../data_files.csv')
+data_files.to_csv(f'{output}../data_files.csv')
