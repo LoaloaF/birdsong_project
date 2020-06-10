@@ -9,19 +9,18 @@ from numpy import save
 from numpy import load
 import pickle
 
-#import the file list csv that Simon created
-data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/data_files.csv', index_col='rec_id')
-
-#first take only 5 recordings
-#first_recordings = data_files.iloc[:5]
 
 ###############################################################################
 #############################LOAD AND ORGANIZE THE DATA########################
 ###############################################################################
-#get the S_trivial_m, S_trivial_f and S_clean subsets from all recordings
-#In Janosch's code, each recording has a list of S_trivial_m, S_trivial_f and S_clean.
-#If any S_trivial_m, S_trivial_f and S_clean signals were detected, they get appeneded to
-#the lists, if not- empty lists are appended
+# get the S_trivial_m, S_trivial_f and S_clean subsets from all recordings
+# In Janosch's code, each recording has a list of S_trivial_m, S_trivial_f and S_clean.
+# If any S_trivial_m, S_trivial_f and S_clean signals were detected, they get appeneded to
+# the lists, if not- empty lists are appended
+
+# import the file list csv that Simon created
+data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
+
 S_trivial_m_all = [] #
 S_trivial_f_all = [] #
 S_clean_all = [] #
@@ -37,8 +36,50 @@ for filename in data_files["SdrChannels"]:
         S_trivial_f_all.append(S_trivial_f)
     if S_clean: #if S_clean not empty, append it to the list
         S_clean_all.append(S_clean)
+    counter += 1
 
-    counter +=1
+
+
+
+###################### NEW PART ###############################
+from adapted_classifier_visualized import classify as classify_vis
+
+#import the filtered data list csv
+filt_data_files = pd.read_csv('../filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
+# slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
+filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
+
+###############################################################################
+#############################LOAD AND ORGANIZE THE DATA########################
+###############################################################################
+#get the S_trivial_m, S_trivial_f and S_clean subsets from all recordings
+#In Janosch's code, each recording has a list of S_trivial_m, S_trivial_f and S_clean.
+#If any S_trivial_m, S_trivial_f and S_clean signals were detected, they get appeneded to
+#the lists, if not- empty lists are appended
+S_trivial_m_all = [] #
+S_trivial_f_all = [] #
+S_clean_all = [] #
+#Put the S_trivial_m, S_trivial_f and S_clean together across recordings
+for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
+    print(f'\nProcessing recording {rec_id} ({i+1}/{filt_data_files.shape[0]})...')
+    daq_file, sdr_file = rec_id_files.values
+    if not np.load(daq_file).any().any():
+        print('Empty.')
+        continue
+    S_trivial_m, S_trivial_f, S_clean = classify_vis(sdr_file, daq_file, 0, -1, 
+                show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
+                show_vocalization=False)
+    print('Done.\n')
+    
+    if S_trivial_m: #if S_trivial_m not empty, append it to the list
+        S_trivial_m_all.append(S_trivial_m)
+    if S_trivial_f: #if S_trivial_f not empty, append it to the list
+        S_trivial_f_all.append(S_trivial_f)
+    if S_clean: #if S_clean not empty, append it to the list
+        S_clean_all.append(S_clean)
+###################### NEW PART ###############################
+
+
 
 
 #################################S_trivial ####################################
@@ -54,6 +95,7 @@ with open('S_trivial_m_all', 'wb') as S_trivial_m_all:
 #open the data
 with open('S_trivial_m_all', 'rb') as S_trivial_m_all:
     S_trivial_m_all_flat = pickle.load(S_trivial_m_all)
+exit()
     
 #Take the first array from evey sublist (mic channel)
 mic = [item[0] for item in S_trivial_m_all_flat]
@@ -482,12 +524,12 @@ def get_data(x_train,y_train,shuffle=False,batch_size=32):
 batch_size=32
 for frame in x:
     for i in range(batch_size):
-            x_file_name = frame
-            y_file_name = y_train[batch_size]
-            x.append(np.load(x_file_name))
-            y.append(sio.loadmat(y_file_name)['average_training_image'][:,time])
-        x = np.asarray(x)
-        y = np.asarray(y)
+        x_file_name = frame
+        y_file_name = y_train[batch_size]
+        x.append(np.load(x_file_name))
+        y.append(sio.loadmat(y_file_name)['average_training_image'][:,time])
+    x = np.asarray(x)
+    y = np.asarray(y)
 
 for frame in v:
     #for i in range(batch_size):
