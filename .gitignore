@@ -10,4 +10,4 @@ pyAudioAnalysis
 .ipynb_checkpoints
 .vscode/
 
-.npy
+# .npy
