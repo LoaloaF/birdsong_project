@@ -8,19 +8,12 @@ from glob import glob
 from os import listdir
 
 # load data (change if "data" folder is not in the same folder as this file)
-path_to_data = 'C:/Users/Josua Graf/polybox/Neural Systems/b8p2male-b10o15female_aligned(1)/b8p2male-b10o15female_aligned'
+path_to_data = '../data/'
 
 days = [14, 15, 16, 18, 19]
-path_to_data = [path_to_data+'/2018-08-{}'.format(d) for d in days]
+path_to_data = [path_to_data+'/2018-08-{}/'.format(d) for d in days]
 # list of all files
-#files = sorted([f for path in path_to_data for f in glob(path  + '\*.*')])
-files = sorted([f for path in path_to_data for f in listdir(path)])
-#files = sorted([[path+'/'+f] for path in path_to_data for f in listdir(path)])
-
-[print(f)for f in files]
-#l = [print(f) for f in files if 'log' in f]
-print(len(files))
-
+files = sorted([f for path in path_to_data for f in glob(path  + '*.*')])
 
 # slice out the recording id from the file to construct a dataframe
 recording_ids = []

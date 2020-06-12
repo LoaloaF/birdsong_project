@@ -3,6 +3,7 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 import glob
+import os
 
 from matplotlib.dates import date2num
 from matplotlib import pyplot as plt
@@ -12,19 +13,24 @@ from matplotlib.animation import FuncAnimation
 import ipywidgets as widgets
 from ipywidgets import interact, interact_manual, interactive
 
-# set the filtered data to fetch
+#path to data_files.csv:
+data_files_path = './..'
+
+# set the filtered data to fetch (optional)
 thr = .05
 pad = .5
-this_thr = f'min.amp.{thr:.2f}_pad.sec.{(pad):.2f}'
+this_thr = f'MinAmp{thr:.2f}_PadSec{(pad):.2f}'
+filt_data_files_path = './../filtered'
 
 # load dataframe with file locations, check if filtered data exists
-data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
-if glob.glob('../filt_data_files_*'):
-    filtered_data = pd.read_csv(f'../filt_data_files_{this_thr}.csv', 
-                                index_col='rec_id')
-    data_files = pd.concat([data_files, filtered_data]) # merge with standard data
+data_files = pd.read_csv(f'{data_files_path}/data_files.csv', index_col='rec_id')
+filt_data_file = f'{filt_data_files_path}/filt_data_files_{this_thr}.csv'
+if os.path.isfile(filt_data_file):
+    filtered_data = pd.read_csv(filt_data_file, index_col='rec_id')
+    data_files = pd.concat([data_files, filtered_data], axis=1) # merge with standard data
 
-# init empty data containers for all the different audio-types
+# init empty data containers for all the different audio-types, all audio types
+# have the attributes (keys in dict) below
 data_keys = 'data', 'data_sl', 'x_ticks', 'x_ticks_sl', 'sample_rate', 'name'
 empty_data = dict().fromkeys(data_keys, None)
 
@@ -33,50 +39,44 @@ sdr_carrier_freq, sdr_receiver_freq = empty_data.copy(), empty_data.copy()
 sdr_signal_strength = empty_data.copy()
 sdr_channellist = None
 
-def pick_rec_no(interactive=True, rec_no=3):
+def pick_rec_no(interactive=True, rec_no=3, get_filtered=False):
     """
     Fill the empty data containers defined above with one specific recording
-    or a filtered recording chunk generated in `filter_data.py`. As all the 
+    or a filtered recording generated in `filter_data.py`. As all the 
     other functions in this script, one may call `pick_rec_no` with the 
     `interactive`=False keyword to use it in a script, or as True in a jupyter 
-    notebook. 
+    notebook (default). 
     """
-    def _pick_rec_no(rec_no):
+    def _pick_rec_no(rec_no, get_filtered):
+        global sdr_channellist
         print('Reading and formatting data... ', end='')
 
+        # get a list of all the files corresponding to the rec_no
         rec_files = data_files.loc[rec_no,:]
-        audio_types = daq, sdr_carrier_freq, None, sdr, sdr_receiver_freq, sdr_signal_strength
-        for audio_type, (name, file) in zip(audio_types, rec_files.iteritems()):
-            # unfiltered recording selected 
-            if isinstance(rec_no, int):
-                if name not in ('SdrChannelList', 'DAQmxAudio', 'log'):
-                    ampl, sr = sf.read(file)
-                    audio_type['data'] = ampl
-                    audio_type['sample_rate'] = sr
-                    audio_type['x_ticks'] = np.arange(len(ampl))/sr
-                    audio_type['name'] = name
-
-                elif name == 'SdrChannelList':
-                    global sdr_channellist
-                    sdr_channellist = pd.read_csv(file, index_col='channel_number')
-            
-            # filtered data only populates daq, sdr and sdr_channellist 
-            elif name in ('DAQmx', 'SdrChannels'):
-                ampl, sr = np.load(file), 32000 if name == 'DAQmx' else 24000
+        sdr_channellist = pd.read_csv(rec_files['SdrChannelList'], index_col='channel_number')
+        
+        # populate the datacontainers `audio_types` with data from the matching file 
+        if not get_filtered:    # unfiltered recording selected
+            audio_types = daq, sdr_carrier_freq, sdr, sdr_receiver_freq, sdr_signal_strength
+            file_types = ['DAQmx', 'SdrCarrierFreq', 'SdrChannels', 'SdrReceiveFreq', 'SdrSignalStrength']
+            for audio_type, (name, file) in zip(audio_types, rec_files[file_types].iteritems()):
+                ampl, sr = sf.read(file)
                 audio_type['data'] = ampl
                 audio_type['sample_rate'] = sr
                 audio_type['x_ticks'] = np.arange(len(ampl))/sr
                 audio_type['name'] = name
 
-                # simply the first element of the unfiltered recordings
-                sdr_channellist = pd.read_csv(data_files['SdrChannelList'].iloc[0], 
-                                            index_col='channel_number')
-        
-        print('Done.\nLength of the selected recording `{}`: {} min'.format(rec_no, int(daq['x_ticks'][-1]/60)))
-        if isinstance(rec_no, str):
-            print(f'\nFiltered data selected with parameters min_amplitude: {thr}; pad_seconds: {pad}.')
-            print('To get differently filtered data edit the gui_backend.py file.')
-        
+        else:
+            audio_types = daq, sdr
+            file_types = ['filt_DAQmx','filt_SdrChannels']
+            for audio_type, (name, file) in zip(audio_types, rec_files[file_types].iteritems()):
+                ampl, sr = np.load(file), 32000 if name == 'filt_DAQmx' else 24000
+                audio_type['data'] = ampl
+                audio_type['sample_rate'] = sr
+                audio_type['x_ticks'] = np.arange(len(ampl))/sr
+                audio_type['name'] = name
+            
+        print('Done.\nLength of the selected recording `{}`: {} sec'.format(rec_no, int(daq['x_ticks'][-1])))
         
     if interactive:
         interact(_pick_rec_no,
@@ -84,9 +84,13 @@ def pick_rec_no(interactive=True, rec_no=3):
                     options=data_files.index.unique(),
                     description='Recording you want to explore',
                     style={'description_width': 'initial'}),
+                 get_filtered=widgets.Checkbox(
+                    value=False,
+                    description='Use the filtered version of recording',
+                    style={'description_width': 'initial'}),
                 )
     else:
-        _pick_rec_no(rec_no)
+        _pick_rec_no(rec_no, get_filtered)
 
 def pick_plot_limits(interactive=True, start=0, length=15):
     """
@@ -270,8 +274,10 @@ def animate_spectrogram(resolution):
     return fig, x_dwnsampled, animation_frame
 
 if __name__ == "__main__":
-    pick_rec_no(interactive=False, rec_no='00-06')  # select recording
-    pick_plot_limits(interactive=False, start=1.15, length=23)  # slice the data
+    pick_rec_no(interactive=False, get_filtered=True)  # select recording
+    print(sdr_channellist)
+
+    pick_plot_limits(interactive=False, start=0, length=13)  # slice the data
     spectrogram(interactive=False,xunit='minutes')  # draw the spectrogram
     
     # adjust the resolution value if the red line and audio are out of sync
