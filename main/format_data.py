@@ -35,7 +35,8 @@ data_files = pd.DataFrame(index=pd.Index(recording_ids, name='rec_id'), columns=
 # populate dataframe
 for filetype in data_files.columns:
     #sub_files = [f for f in files if filetype in f]
-    sub_files = [[path+'/'+f] for path in path_to_data for f in listdir(path) if filetype in f]
+    #sub_files = [[path+'/'+f] for path in path_to_data for f in listdir(path) if filetype in f]
+    sub_files = [os.path.join(path,f) for path in path_to_data for f in listdir(path) if filetype in f]     # modivication josua
     data_files[filetype] = sub_files
 print(data_files)
 # write a csv table to easily index the files you need
