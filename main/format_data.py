@@ -6,12 +6,14 @@ table to lookup file locations.
 import pandas as pd
 from glob import glob
 from os import listdir
+import os
+from config import path_to_data
 
 # load data (change if "data" folder is not in the same folder as this file)
-path_to_data = '../data/'
+#path_to_data = '../data/'
 
 days = [14, 15, 16, 18, 19]
-path_to_data = [path_to_data+'/2018-08-{}/'.format(d) for d in days]
+path_to_data = [path_to_data+'/2018-08-{}'.format(d) for d in days]
 # list of all files
 files = sorted([f for path in path_to_data for f in glob(path  + '*.*')])
 
@@ -26,7 +28,7 @@ for i, f in enumerate(files):
 
 # make a dataframe that has the recording id as rows, and the filetypes as columns
 # each entry is the path to the respective file so you can easily get the files you need.
-filetypes = ['DAQmx', 'SdrCarrierFreq', 'SdrChannelList', 'SdrChannels', 
+filetypes = ['DAQmx', 'SdrCarrierFreq', 'SdrChannelList', 'SdrChannels',
              'SdrReceiveFreq', 'SdrSignalStrength','log']
 data_files = pd.DataFrame(index=pd.Index(recording_ids, name='rec_id'), columns=filetypes)
 

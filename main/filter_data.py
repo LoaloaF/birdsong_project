@@ -15,7 +15,8 @@ from pathlib import Path
 from glob import glob
 
 spacer = '------------------------------------'
-output = '/media/loaloa/Samsung_T5/filt_birdsong_data'
+#output = '/media/loaloa/Samsung_T5/filt_birdsong_data'
+from config import output       # modiviction josua
 
 def filter_audio(threshold, pad, chunk, save_wav_file=False):
     """
@@ -80,20 +81,24 @@ def filter_audio(threshold, pad, chunk, save_wav_file=False):
         sdr_sl = audio_sl = np.array([])
         print(f'Done:\t\t Length: 00.00 min (empty)')
 
-    np.save(f'{output}/DAQmx_{rec_id:0>2d}_{this_thr}', audio_sl)
-    np.save(f'{output}/Sdr_{rec_id:0>2d}_{this_thr}', sdr_sl)
+    #np.save(f'{output}/DAQmx_{rec_id:0>2d}_{this_thr}', audio_sl)
+    np.save(os.path.join(output,f'DAQmx_{rec_id:0>2d}_{this_thr}'), audio_sl)   # modivication josua
+    #np.save(f'{output}/Sdr_{rec_id:0>2d}_{this_thr}', sdr_sl)
+    np.save(os.path.join(output,f'Sdr_{rec_id:0>2d}_{this_thr}'), sdr_sl)       # modivication josua
     if save_wav_file:
-        sf.write(f'{output}/audio_{rec_id:0>2d}_{this_thr}.wav', audio_sl, 32000)
+        #sf.write(f'{output}/audio_{rec_id:0>2d}_{this_thr}.wav', audio_sl, 32000)
+        sf.write(os.path.join(output,f'audio_{rec_id:0>2d}_{this_thr}.wav'), audio_sl, 32000)       # modivication josua
     return audio_sl, sdr_sl
 
 def make_filtered_data_files_csv():
     """
-    Save a file-lookup .csv equivalent to `data_files.csv` as 
+    Save a file-lookup .csv equivalent to `data_files.csv` as
     `./filt_data_files_min.amp.*_pad.sec.*.csv. Asterisks are 
     replaced by thresholds and pads used.
     """
     # get all the files in the output dir that match the current hyperparamters
-    files = glob(f'{output}/*{this_thr}*')
+    #files = glob(f'{output}/*{this_thr}*')
+    files = glob(os.path.join(output,f'*{this_thr}*'))      # modivication josua
     index = [f[-28:-26] for f in files if 'audio' in f]
 
     # construct a file location lookup dataframe
@@ -104,7 +109,8 @@ def make_filtered_data_files_csv():
     data[cols[2]] = [f for f in files if 'audio' in f] # audio
 
     data = pd.DataFrame(data, index=pd.Index(index, name='rec_id'))
-    fname = f'{output}/filt_data_files_{this_thr}.csv'
+    #fname = f'{output}/filt_data_files_{this_thr}.csv'
+    fname = os.path.join(output,'/filt_data_files_{this_thr}.csv')      # modivication josua
     data.to_csv(fname)
     print(f'\n{fname} - created and saved successfully.')
 

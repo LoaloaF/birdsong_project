@@ -4,6 +4,7 @@ import soundfile as sf
 import sounddevice as sd
 import glob
 import os
+from config import data_files_path
 
 from matplotlib.dates import date2num
 from matplotlib import pyplot as plt
@@ -14,7 +15,7 @@ import ipywidgets as widgets
 from ipywidgets import interact, interact_manual, interactive
 
 #path to data_files.csv:
-data_files_path = './..'
+#data_files_path = './..'
 
 # set the filtered data to fetch (optional)
 thr = .05
