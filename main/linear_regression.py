@@ -45,7 +45,7 @@ for filename in data_files["SdrChannels"]:
 from adapted_classifier_visualized import classify as classify_vis
 
 #import the filtered data list csv
-filt_data_files = pd.read_csv('../filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
+filt_data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
 # slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
 filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
 
@@ -77,7 +77,6 @@ for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
         S_trivial_f_all.append(S_trivial_f)
     if S_clean: #if S_clean not empty, append it to the list
         S_clean_all.append(S_clean)
-###################### NEW PART ###############################
 
 
 
@@ -286,6 +285,43 @@ female_clean = np.concatenate(female_clean, axis=1)
 
 
 
+
+###################### NEW PART ###############################
+
+
+
+trivial_m_x = [] #
+trivial_m_y = [] #
+trivial_f_x = [] #
+trivial_f_y = [] #
+clean_m_x = [] #
+clean_f_x = [] #
+clean_y = [] #
+
+#Put the S_trivial_m, S_trivial_f and S_clean together across recordings
+for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
+    print(f'\nProcessing recording {rec_id} ({i+1}/{filt_data_files.shape[0]})...')
+    daq_file, sdr_file = rec_id_files.values
+    if not np.load(daq_file).any().any():
+        print('Empty.')
+        continue
+    male_x, male_y, female_x, female_y, clean_m, clean_f, clean_y_ = classify_vis(sdr_file,
+                daq_file, 0, -1, 
+                show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
+                show_vocalization=False)
+    print('Done.\n')
+    
+    
+    if male_x: #if S_trivial_m not empty, append it to the list
+        trivial_m_x.append(male_x)
+        trivial_m_y.append(male_y)
+    if female_x: #if S_trivial_f not empty, append it to the list
+        trivial_f_x.append(female_x)
+        trivial_f_y.append(female_y)
+    if clean_m: #if S_clean not empty, append it to the list
+        clean_m_x.append(clean_m)
+        clean_f_x.append(clean_f)
+        clean_y.append(clean_y_)
 
 
 

@@ -109,13 +109,13 @@ def make_filtered_data_files_csv():
     data[cols[2]] = [f for f in files if 'audio' in f] # audio
 
     data = pd.DataFrame(data, index=pd.Index(index, name='rec_id'))
-    #fname = f'{output}/filt_data_files_{this_thr}.csv'
-    fname = os.path.join(output,f'/filt_data_files_{this_thr}.csv')      # modivication josua
+    fname = f'{output}/filt_data_files_{this_thr}.csv'
+    #fname = os.path.join(output,f'/filt_data_files_{this_thr}.csv')      # modivication josua
     data.to_csv(fname)
     print(f'\n{fname} - created and saved successfully.')
 
 # load dataframe with file locations
-data_files = pd.read_csv('../data_files.csv', index_col='rec_id')
+data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/data_files.csv', index_col='rec_id')
 
 thr = .05 # minimum amplitude
 pad = 0.5 # seconds to include before and after an above-threshold amplitude
