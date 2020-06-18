@@ -110,6 +110,7 @@ def make_filtered_data_files_csv():
 
     data = pd.DataFrame(data, index=pd.Index(index, name='rec_id'))
     fname = f'{output}/filt_data_files_{this_thr}.csv'
+    #fname = os.path.join(output,f'/filt_data_files_{this_thr}.csv')      # modivication josua
     data.to_csv(fname)
     print(f'\n{fname} - created and saved successfully.')
 

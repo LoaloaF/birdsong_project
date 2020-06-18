@@ -37,9 +37,19 @@ def classify(sdr_file, daq_file, start, stop, window_length=10240, hop_length=25
     start = start * sampling_rate
     stop = stop * sampling_rate if stop > 0 else -1
     
+    #######
+    start = 0 * sampling_rate
+    stop = -1 * sampling_rate if -1 > 0 else -1
+    
+    
     #audio
     # audio, sampling_rate = sf.read(filename, start=start, stop=stop)
     sdr = np.load(sdr_file)
+    
+    sdr = np.load('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/Sdr_30_MinAmp0.05_PadSec0.50.npy')
+    
+    daq_raw = np.load('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/DAQmx_03_MinAmp0.05_PadSec0.50.npy')
+    
     daq_raw = np.load(daq_file)
     daq = resample(daq_raw, sdr.shape[0])   # get the DAQmx data from 32k to 24k
 
@@ -274,18 +284,22 @@ def classify(sdr_file, daq_file, start, stop, window_length=10240, hop_length=25
         t_both_edges = [smpl_idx for edges in t_both_edges for smpl_idx in edges]
         t_both_edges = np.concatenate([np.where(t_all==edge)[0] for edge in t_both_edges]) /24000
         
-        # using matplotlib spectrograms for learning ? Uncomment and return items below
-        # male_x, _, _, _ = plt.specgram(female[t_fem], Fs=24000)
-        # female_x, _, _, _ = plt.specgram(male[t_male], Fs=24000)
-        # male_y, _, _, _ = plt.specgram(mic[t_male], Fs=24000)
-        # female_y, _, _, _ = plt.specgram(mic[t_fem], Fs=24000)
-        # plt.close()
+        #using matplotlib spectrograms for learning ? Uncomment and return items below
+        male_x, _, _, _ = plt.specgram(male[t_male], Fs=24000)
+        female_x, _, _, _ = plt.specgram(female[t_fem], Fs=24000)
+        male_y, _, _, _ = plt.specgram(mic[t_male], Fs=24000)
+        female_y, _, _, _ = plt.specgram(mic[t_fem], Fs=24000)
+        clean_m_x, _, _, _ = plt.specgram(male[t_both], Fs=24000)
+        clean_f_x, _, _, _ = plt.specgram(female[t_both], Fs=24000)
+        clean_y, _, _, _ = plt.specgram(mic[t_both], Fs=24000)
+        plt.close()
 
         if show_vocalization:
             # draw spectrogram
             spectrogram(mic, energy_filt, fem_edges=t_fem_edges, male_edges=t_male_edges, 
                         both_edges=t_both_edges)
-    return S_trivial_m, S_trivial_f, S_clean
+    return male_x, male_y, female_x, female_y, clean_m_x, clean_f_x, clean_y
+#S_trivial_m, S_trivial_f, S_clean
 
 
 
