@@ -8,6 +8,8 @@ from sklearn.metrics import mean_squared_error,  mean_absolute_error, r2_score
 from numpy import save
 from numpy import load
 import pickle
+import os
+from config import output
 
 
 ###############################################################################
@@ -45,7 +47,9 @@ for filename in data_files["SdrChannels"]:
 from adapted_classifier_visualized import classify as classify_vis
 
 #import the filtered data list csv
-filt_data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
+#filt_data_files = pd.read_csv('../filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
+filt_data_files = pd.read_csv(os.path.join(output,'filt_data_files_MinAmp0.05_PadSec0.50.csv'), index_col='rec_id')     # modivication josua
+#filt_data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
 # slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
 filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
 
@@ -306,12 +310,12 @@ for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
         print('Empty.')
         continue
     male_x, male_y, female_x, female_y, clean_m, clean_f, clean_y_ = classify_vis(sdr_file,
-                daq_file, 0, -1, 
+                daq_file, 0, -1,
                 show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
                 show_vocalization=False)
     print('Done.\n')
-    
-    
+
+
     if male_x: #if S_trivial_m not empty, append it to the list
         trivial_m_x.append(male_x)
         trivial_m_y.append(male_y)
