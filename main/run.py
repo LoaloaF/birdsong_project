@@ -7,12 +7,14 @@ from sklearn.linear_model import LinearRegression, Lasso, LassoCV, Ridge, RidgeC
 from sklearn.metrics import mean_squared_error,  mean_absolute_error, r2_score
 from numpy import save
 from numpy import load
+import os
+from config import *
 import pickle
 
 from adapted_classifier_visualized2 import classify as classify_vis
 
 #import the filtered data list csv
-filt_data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
+filt_data_files = pd.read_csv(os.path.join(output,'filt_data_files_MinAmp0.05_PadSec0.50.csv'), index_col='rec_id')
 # slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
 filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
 
