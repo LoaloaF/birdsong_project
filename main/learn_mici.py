@@ -6,158 +6,235 @@ import os
 import matplotlib.pyplot as plt
 from config import output
 from sklearn.decomposition import FastICA
+from sklearn.linear_model import LinearRegression
+from sklearn.neural_network import MLPClassifier
 import pickle
 from adapted_classifier_visualized2 import classify as classify_vis
 
-'''
-# creat path to numpy arras created by run
-temp,dummy = os.path.split(output)
-path = os.path.join(temp,'vectorData')
 
-# load numpy arrays created by run
-file = os.path.join(path,'clean_m_x')
-with open(file,'rb') as clean_m_x:
-    clean_m_x_flat = pickle.load('clean_m_x',encoding='bytes')
-'''
+# creat path to numpy arrays
+path = 'C:/Users/Josua Graf/PycharmProjects/train_data/'
 
-'''
-#import the filtered data list csv
-filt_data_files = pd.read_csv(os.path.join(output,'filt_data_files_MinAmp0.05_PadSec0.50.csv'), index_col='rec_id')
-# slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
-filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
+# load numpy arrays created by voc_classific_vis_josua
+file = os.path.join(path, 'S_clean_mic.npy')
+clean_mic = np.load(file)
+print(file, 'loaded')
+file = os.path.join(path, 'S_clean_f_acc.npy')
+clean_f = np.load(file)
+print(file, ' loaded')
+file = os.path.join(path, 'S_clean_m_acc.npy')
+clean_m = np.load(file)
+print(file, ' loaded')
+file = os.path.join(path, 'S_clean_f_bool.npy')
+clean_f_bool = np.load(file)
+print(file, ' loaded')
+file = os.path.join(path, 'S_clean_m_bool.npy')
+clean_m_bool = np.load(file)
+print(file, ' loaded')
 
+# define sampling rate
+sampling_rate = 24000
+# define time axis
+time = np.arange(len(clean_mic)) / sampling_rate  # in seconds
 
-#Put the S_trivial_m, S_trivial_f and S_clean together across recordings
-for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
-    print(f'\nProcessing recording {rec_id} ({i+1}/{filt_data_files.shape[0]})...')
-    daq_file, sdr_file = rec_id_files.values
-    if not np.load(daq_file).any().any():
-        print('Empty.')
-        continue
-    male_x, male_y, female_x, female_y, clean_m, clean_f, clean_y_ = classify_vis(sdr_file,
-                daq_file, 0, -1,
-                show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
-                show_vocalization=False)
-    print('Done.\n')
-    myplot = plt.plot(male_x)
-    plt.show(myplot)
-    print('OK')
-'''
+# plot clean imported signal
+def plotImportData(i):
+    if i == True:
+        clean_plot = plt.subplot(511)
+        clean_plot = plt.plot(time, clean_mic,c='k')
+        clean_plot = plt.title('Clean Mic')
+        clean_plot = plt.ylabel('energy')
+        clean_plot = plt.subplot(512)
+        clean_plot = plt.plot(time, clean_f)
+        clean_plot = plt.title('Clean Female Acc')
+        clean_plot = plt.ylabel('energy')
+        clean_plot = plt.subplot(513)
+        clean_plot = plt.plot(time, clean_f_bool)
+        clean_plot = plt.title('Boolean Female Voc')
+        clean_plot = plt.subplot(514)
+        clean_plot = plt.plot(time, clean_m,c='r')
+        clean_plot = plt.title('Clean Male Acc')
+        clean_plot = plt.ylabel('energy')
+        clean_plot = plt.subplot(515)
+        clean_plot = plt.plot(time, clean_m_bool,c='r')
+        clean_plot = plt.title('Boolean Male Voc')
+        clean_plot = plt.xlabel('time in s')
+        clean_plot = plt.subplots_adjust(hspace=1.5)
+        plt.show(clean_plot)
+    return
 
+plotImportData(True)
 
-# load filtered file list
-filtered_files = pd.read_csv(os.path.join(output,'filt_data_files_MinAmp0.05_PadSec0.50.csv'), index_col='rec_id')
-
-# define sampling rates
-sampling_rate_sdr = 24000
-sampling_rate_daq = 32000
-
-# load all filtered sdr files
-rec_no = filtered_files.index.values
-filt_mic = []
-filt_f = []
-filt_m = []
-for i, rec_id in enumerate([0,1,5,6]):    # for faster test
-#for i, rec_id in enumerate(filtered_files.index.values):       # for all files
-    print(rec_id)
-    data = filtered_files.loc[rec_id, ['filt_DAQmx', 'filt_SdrChannels']]
-    print(data)
-    if np.load(data['filt_SdrChannels']).any():
-        filt_mic.append(np.load(data['filt_SdrChannels'])[:,0])
-        filt_f.append(np.load(data['filt_SdrChannels'])[:,1])
-        filt_m.append(np.load(data['filt_SdrChannels'])[:,2])
+# extract trivial_m for linear regression
+trivial_m_mic = []
+trivial_m_acc = []
+for i in range(len(clean_mic)):
+    if clean_m_bool[i] == 1:
+        trivial_m_mic.append(clean_mic[i])
+        trivial_m_acc.append(clean_m[i])
     else:
-        filt_mic.append([])
-        filt_f.append([])
-        filt_m.append([])
+        continue
+trivial_m_mic = np.transpose(np.array(trivial_m_mic))
+trivial_m_acc = np.transpose(np.array(trivial_m_acc))
 
-# reshape filt_mic, filt_f and filt_m to a one dimensional array
-filt_mic_all = np.concatenate(filt_mic)
-filt_f_all = np.concatenate(filt_f)
-filt_m_all = np.concatenate(filt_m)
+# general trivial extraction defind as a function
+def extractTrivial(c_mic, c_birdi, c_birdj, c_bool):
+    trivial_mic = []
+    trivial_birdi = []
+    trivial_birdj = []
+    for i in range(len(c_mic)):
+        if c_bool[i] == 1:
+            trivial_mic.append(c_mic[i])
+            trivial_birdi.append(c_birdi[i])
+            trivial_birdj.append(c_birdj[i])
+        else:
+            continue
+    trivial_mic = np.transpose(np.array(trivial_mic))
+    trivial_birdi = np.transpose(np.array(trivial_birdi))
+    trivial_birdj = np.transpose(np.array(trivial_birdj))
+    return trivial_mic, trivial_birdi, trivial_birdj
 
-# define window size and calculate number of frames
-window_size = 10000
-no_frames = np.int(np.floor(filt_mic_all.size / window_size))
-print('Frames = ', no_frames)
+# split trivial male into frames
+window_size = 2400
+no_frames = np.int(np.floor(len(trivial_m_mic)/window_size))
+trivial_m_mic_frames = np.array(np.array_split(trivial_m_mic, no_frames))
+trivial_m_acc_frames = np.array(np.array_split(trivial_m_acc, no_frames))
 
-# split long array into frames of approximately window size
-mic_frames = np.array_split(filt_mic_all, no_frames)
-f_frames = np.array_split(filt_f_all, no_frames)
-m_frames = np.array_split(filt_m_all, no_frames)
+# transform frames into spectrograms
+trivial_m_mic_frames_freq = []
+trivial_m_acc_frames_freq = []
+for i in range(no_frames):
+    trivial_m_mic_frames_freq.append(np.fft.fft(trivial_m_mic_frames[i]))
+    trivial_m_acc_frames_freq.append(np.fft.fft(trivial_m_acc_frames[i]))
+trivial_m_mic_frames_freq = np.array(trivial_m_mic_frames_freq)
+trivial_m_acc_frames_freq = np.array(trivial_m_acc_frames_freq)
 
-# fourier transform frames
-mic_frames_freq = []
-f_frames_freq = []
-m_frames_freq = []
-for i in range(0, no_frames-1):
-    mic_frames_freq.append(np.fft.fft(mic_frames[i]))
-    f_frames_freq.append(np.fft.fft(f_frames[i]))
-    m_frames_freq.append(np.fft.fft(m_frames[i]))
+# concatinate
+trivial_m_mic_freq = np.transpose([np.real(np.concatenate(trivial_m_mic_frames_freq))])
+trivial_m_acc_freq = np.transpose([np.real(np.concatenate(trivial_m_acc_frames_freq))])
 
-# define simple function g(acc,mic) = mic - sum(acc_{j!=i})
-def g_simple(accj,mic):
-    mici = np.subtract(mic,accj)
+# fit linear model
+reg = LinearRegression()
+reg.fit(trivial_m_acc_freq, trivial_m_mic_freq)
+print('reg score', reg.score(trivial_m_acc_freq, trivial_m_mic_freq))
+trivial_line_freq = reg.predict(trivial_m_acc_freq)
+
+# plot scatter
+def plotLinearRegressionData(x,y,l,x_label, y_label, i):
+    if i == True:
+        p = plt.scatter(x, y, c='r',marker='x')
+        p = plt.plot(x, l, c='b')
+        p = plt.xlabel(x_label)
+        p = plt.ylabel(y_label)
+        p = plt.title('Scatter Plot of Accelerometer male vs. Microphone male trivial')
+        plt.show(p)
+    return
+
+plotLinearRegressionData(trivial_m_acc_freq, trivial_m_mic_freq, trivial_line_freq, 'Male Acc','Microphone', False)
+
+# prediction of male bird
+trivial_m_mic_pre = np.fft.ifft(trivial_line_freq)
+
+def plotPred(mic,acc,pred,i):
+    if i == True:
+        trivial_time = np.arange(len(mic)) / sampling_rate
+        fig = plt.figure()
+        fig.suptitle('Trivial Male Microphone Signal Reconstruction')
+        p1 = fig.add_subplot(311)
+        p1 = plt.plot(trivial_time, mic, c='k')
+        p1 = plt.title('Microphone')
+        p1 = plt.xlabel('time in s')
+        p1 = plt.ylabel('energy')
+        p2 = fig.add_subplot(312)
+        p2 = plt.plot(trivial_time, acc, c='b')
+        p2 = plt.title('Male Acc')
+        p2 = plt.xlabel('time in s')
+        p2 = plt.ylabel('energy')
+        p3 = fig.add_subplot(313)
+        p3 = plt.plot(trivial_time, pred, c='r')
+        p3 = plt.title('Male Mic Prediction f(male_acc)')
+        p3 = plt.xlabel('time in s')
+        p3 = plt.ylabel('energy')
+        fig.subplots_adjust(hspace=1)
+        plt.show(fig)
+    return
+
+plotPred(trivial_m_mic, trivial_m_acc, trivial_m_mic_pre, False)
+
+# general cut into frames of approximatly window size and concatinate the fourier transform
+def cutFramesFft(mic):
+    no_frames = np.int(np.floor(len(mic)/window_size))
+    mic_frame =  np.array(np.array_split(mic, no_frames))
+    mic_frame_freq = []
+    for i in range(no_frames):
+        mic_frame_freq.append(np.fft.fft(mic_frame[i]))
+    mic_frame_freq = np.array(mic_frame_freq)
+    mic_frame_freq = np.transpose([np.real(np.concatenate(mic_frame_freq))])
+    return mic_frame_freq
+
+# applay Linear Regression on clean values
+clean_m_line_freq = reg.predict(cutFramesFft(clean_m))
+clean_m_mic_pre = np.fft.ifft(clean_m_line_freq)
+clean_f_line_freq = reg.predict(cutFramesFft(clean_f))
+clean_f_mic_pre = np.fft.ifft(clean_f_line_freq)
+# do same as a function Function mic_pre = f(acc)
+def predictMicrophone(acc):
+    line_freq = reg.predict(cutFramesFft(acc))
+    mic_pre = np.fft.ifft(line_freq)
+    return mic_pre
+
+# define function g simple
+def functionGSimple(mic,accj):
+    pre = predictMicrophone(accj)
+    mici = np.concatenate(mic - np.transpose(pre))
     return mici
 
-# define Independent component analysis function
-def g_ICD(accj,mic):
-    ica = FastICA(n_components=2)
-    signal = ica.fit_transform([mic,accj])
-    mici = signal[1]
-    return mici
+#results plots
+# a) trivial vs g
+def plotTrivialAndG(mic,accj,title1,title2): # accj is the other bird not the one of interest
+    time_axis = np.arange(len(mic)) / sampling_rate
+    fig = plt.figure()
+    p1 = fig.add_subplot(211)
+    p1 = plt.plot(time_axis, mic)
+    p1 = plt.title(title1)
+    p1 = plt.xlabel('time in s')
+    p1 = plt.ylabel('energy')
+    p2 = fig.add_subplot(212)
+    p2 = plt.plot(time_axis, functionGSimple(mic, accj))
+    p2 = plt.title(title2)
+    p2 = plt.xlabel('time in s')
+    p2 = plt.ylabel('energy')
+    fig.subplots_adjust(hspace=1)
+    plt.show(fig)
+    return
+def plotTrivialAndGOnePlot(mic,accj,title,label1,label2):
+    time_axis = np.arange(len(mic)) / sampling_rate
+    fig = plt.figure()
+    fig = plt.plot(time_axis, mic,c='k',label=label1)
+    fig = plt.title(title)
+    fig = plt.xlabel('time in s')
+    fig = plt.ylabel('energy')
+    fig = plt.plot(time_axis, functionGSimple(mic, accj),c='r',label=label2)
+    fig = plt.legend()
+    plt.show(fig)
+    return
 
-#female = g_simple(filt_m_all,filt_mic_all)
-female = g_ICD(np.add(filt_m_all,filt_f_all),filt_mic_all)
-print(np.size(filt_mic_all))
-print(np.size(filt_m_all))
-print(np.size(female))
+#plot trivial male and  g prediction male
+trivial_mic, trivial_m, trivial_m_f = extractTrivial(clean_mic,clean_m,clean_f,clean_m_bool)
+#plotTrivialAndG(trivial_mic,trivial_m_f,'Trivial Male Microphone','Male Reconstruction = g(trivial_mic, female for trivial_m)')
+#plotTrivialAndGOnePlot(trivial_mic,trivial_m_f,'Trivial Male','Microphone','Reconstructed Male')
 
-# simple function
-reconstruction_freq = g_simple(m_frames_freq,mic_frames_freq)
+#plot trivial female and  g prediction female
+trivial_mic, trivial_f, trivial_f_m = extractTrivial(clean_mic,clean_f,clean_m,clean_f_bool)
+#plotTrivialAndG(trivial_mic,trivial_f_m,'Trivial Female Microphone','Female Reconstruction = g(trivial_mic, male for trivial_f)')
+#plotTrivialAndGOnePlot(trivial_mic,trivial_f_m,'Trivial Female','Microphone','Reconstructed Female')
 
-# retransform
-for i in range(0,no_frames):
-    reconstruction = np.fft.fft(reconstruction_freq)
+# b) plot trivial
+# for male is silent (trivial_f)
+trivial_mic, trivial_f, trivial_f_m = extractTrivial(clean_mic,clean_m,clean_f,clean_f_bool)
+#plotTrivialAndG(trivial_mic, trivial_f,'Male Silent Microphone','Male Reconstruction')
+#plotTrivialAndGOnePlot(trivial_mic,trivial_f,'Trivial Female / Male Silent','Microphone','Reconstructed Male')
 
-# plot
-#myPlot = plt.subplot(311)
-for i in range(0, no_frames-1):
-    myPlot = plt.plot(reconstruction[i])
-#myPlot = plt.subplot(312)
-#myPlot = plt.plot(filt_f_all)
-#myPlot = plt.subplot(313)
-#myPlot = plt.plot(female)
-plt.show(myPlot)
-
-
-'''
-# load mic (s_clean) and clean female and clean male
-S_clean_mic = np.load('S_clean_mic.npy')
-S_clean_f = np.load('S_clean_female.npy')
-S_clean_m = np.load('S_clean_male.npy')
-
-# print shape of S_clean_i
-print(np.shape(S_clean_mic))
-print(np.shape(S_clean_f))
-print(np.shape(S_clean_m))
-
-# plot imported data
-myPlot = plt.subplot(311)
-myPlot = plt.plot(filt_mic_all)
-myPlot = plt.subplot(312)
-#myPlot = plt.plot(filt_f)
-myPlot = plt.subplot(313)
-#myPlot = plt.plot(filt_m)
-plt.show(myPlot)
-
-print('list loaded')
-
-# define simple function g(acc,mic) = mic - sum(acc_{j!=i})
-def g_simple(accj,mic):
-    mici = mic - accj
-
-# test function g
-mic_f = g_simple(S_clean_m,S_clean_mic)
-plt.show(plt.plot(mic_f))
-'''
+# for female is silent (trivial_m)
+trivial_mic, trivial_m, trivial_m_f = extractTrivial(clean_mic,clean_f,clean_m,clean_m_bool)
+#plotTrivialAndGOnePlot(trivial_mic,trivial_m,'Trivial Male / Female Silent','Microphone','Reconstructed Female')
