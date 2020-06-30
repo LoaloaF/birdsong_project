@@ -11,6 +11,7 @@ import pickle
 import os
 from config import output
 
+"""MELSPECTROGRAMS"""
 
 ###############################################################################
 #############################LOAD AND ORGANIZE THE DATA########################
@@ -40,47 +41,6 @@ for filename in data_files["SdrChannels"]:
         S_clean_all.append(S_clean)
     counter += 1
 
-
-
-
-###################### NEW PART ###############################
-from adapted_classifier_visualized import classify as classify_vis
-
-#import the filtered data list csv
-#filt_data_files = pd.read_csv('../filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
-filt_data_files = pd.read_csv(os.path.join(output,'filt_data_files_MinAmp0.05_PadSec0.50.csv'), index_col='rec_id')     # modivication josua
-#filt_data_files = pd.read_csv('/Volumes/Drive/ETH/Neural_Systems/b8p2male-b10o15female_aligned/filtered/filt_data_files_MinAmp0.05_PadSec0.50.csv', index_col='rec_id')
-# slice to sdr and DAQmx(to use in future perhaps) by getting rid of the third file, the .wav audio
-filt_data_files = filt_data_files.drop('filt_DAQmxAudio', axis=1)
-
-###############################################################################
-#############################LOAD AND ORGANIZE THE DATA########################
-###############################################################################
-#get the S_trivial_m, S_trivial_f and S_clean subsets from all recordings
-#In Janosch's code, each recording has a list of S_trivial_m, S_trivial_f and S_clean.
-#If any S_trivial_m, S_trivial_f and S_clean signals were detected, they get appeneded to
-#the lists, if not- empty lists are appended
-S_trivial_m_all = [] #
-S_trivial_f_all = [] #
-S_clean_all = [] #
-#Put the S_trivial_m, S_trivial_f and S_clean together across recordings
-for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
-    print(f'\nProcessing recording {rec_id} ({i+1}/{filt_data_files.shape[0]})...')
-    daq_file, sdr_file = rec_id_files.values
-    if not np.load(daq_file).any().any():
-        print('Empty.')
-        continue
-    S_trivial_m, S_trivial_f, S_clean = classify_vis(sdr_file, daq_file, 0, -1, 
-                show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
-                show_vocalization=False)
-    print('Done.\n')
-    
-    if S_trivial_m: #if S_trivial_m not empty, append it to the list
-        S_trivial_m_all.append(S_trivial_m)
-    if S_trivial_f: #if S_trivial_f not empty, append it to the list
-        S_trivial_f_all.append(S_trivial_f)
-    if S_clean: #if S_clean not empty, append it to the list
-        S_clean_all.append(S_clean)
 
 
 
@@ -119,7 +79,7 @@ x = np.transpose(np.concatenate(male, axis=1))
 #################################S_trivial ####################################
 
 
-
+#MELSPECTROGRAM DATA
 ########Ordinary least squares Linear Regression########
 
 ####Train test split####
@@ -154,10 +114,7 @@ mean_squared_error(y, y_pred) #0.00020003068
 #the best value is 0.0
 mean_absolute_error(y, y_pred) #0.0005999213
 
-#these plots dont make sense
-plt.scatter(x_test, y_test,  color='black')
-plt.plot(x_test, y_pred, color='blue', linewidth=3)
-
+#cross val 0.8227082193278795 lower
 
 
 ########Ridge#########################################
@@ -201,7 +158,7 @@ mean_squared_error(y, y_pred_clf) #0.0001218898182731349
 #the best value is 0.0
 mean_absolute_error(y, y_pred_clf) #0.0005801960904272817
 
-
+#cross val 0.38550411505727733 lower
 
 ########Lasso#########################################
 
@@ -214,7 +171,7 @@ lasso_coefficients= reg.coef_
 y_pred_lasso = lasso.predict(x_test)
 
 ####Prediction metrics- evaluate the quality of prediction####
-r2_score_lasso = r2_score(y_test, y_pred_lasso) #-4.333005852998409e-05
+r2_score_lasso = r2_score(y_test, y_pred_lasso) #-4.333005852998409e-05 == -0.00004333005
 #the best value is 0.0
 mean_squared_error(y_test, y_pred_lasso) #0.00013500836
 #the best value is 0.0
@@ -228,6 +185,7 @@ mean_squared_error(y, y_pred_lasso) #7.85883e-05
 #the best value is 0.0
 mean_absolute_error(y, y_pred_lasso) #0.0005987262
 
+#cross val 0.0002253349847883071 smaller
 
 ####Multi task lasso Cross Validation#### 
 ####Fit the model####
@@ -243,6 +201,7 @@ MultiTaskLassoCV = MultiTaskLassoCV(random_state=0, verbose=1).fit(x, y)
 ElNet = ElasticNet(alpha= 0.5, random_state=0).fit(x,y)
 ElNet.score(x, y) #-1.1142739679728243e-16
 
+
 #Try with cross validation prediction
 y_pred_ElNet = cross_val_predict(ElNet, x, y, cv=3) 
 r2_score(y, y_pred_ElNet) #-0.0002686650433182912
@@ -255,6 +214,22 @@ mean_absolute_error(y, y_pred_ElNet) #0.0005987262
 ElNetCV = MultiTaskElasticNetCV(random_state=0, verbose=1).fit(x, y)
 ##UserWarning: Objective did not
 #converge. You might want to increase the number of iterations
+
+
+#Plot
+start = 10000
+plt.figure()
+plt.pcolormesh(np.log(x[start:start+1000,:]))
+plt.ylabel('time')
+plt.xlabel('freq')
+plt.figure()
+plt.pcolormesh(np.log(y[start:start+1000,:]))
+plt.ylabel('time')
+plt.xlabel('freq')
+
+
+
+
 
 
 
@@ -289,60 +264,10 @@ female_clean = np.concatenate(female_clean, axis=1)
 
 
 
-
-###################### NEW PART ###############################
-
-
-
-trivial_m_x = [] #
-trivial_m_y = [] #
-trivial_f_x = [] #
-trivial_f_y = [] #
-clean_m_x = [] #
-clean_f_x = [] #
-clean_y = [] #
-
-#Put the S_trivial_m, S_trivial_f and S_clean together across recordings
-for i, (rec_id, rec_id_files) in enumerate(filt_data_files.iterrows()):
-    print(f'\nProcessing recording {rec_id} ({i+1}/{filt_data_files.shape[0]})...')
-    daq_file, sdr_file = rec_id_files.values
-    if not np.load(daq_file).any().any():
-        print('Empty.')
-        continue
-    male_x, male_y, female_x, female_y, clean_m, clean_f, clean_y_ = classify_vis(sdr_file,
-                daq_file, 0, -1,
-                show_energy_plot=False, show_framesizes=False, rec_id=rec_id,
-                show_vocalization=False)
-    print('Done.\n')
-
-
-    if male_x: #if S_trivial_m not empty, append it to the list
-        trivial_m_x.append(male_x)
-        trivial_m_y.append(male_y)
-    if female_x: #if S_trivial_f not empty, append it to the list
-        trivial_f_x.append(female_x)
-        trivial_f_y.append(female_y)
-    if clean_m: #if S_clean not empty, append it to the list
-        clean_m_x.append(clean_m)
-        clean_f_x.append(clean_f)
-        clean_y.append(clean_y_)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 """ 
-Below this point is not relevant
+FROM AMPLITUDE DATA 
 """
+#below this point not relevant
 
 #########From amplitude data#############
 
@@ -394,15 +319,12 @@ for frame in S_trivial_m_array:
     jj = np.vstack((x, y)).T
     S_m.append(jj)
 
-    
-#check for clean(as this is 3d) ###!!!
 S_cl = []
 for frame in S_clean_array:
     #for i in range(batch_size):
     jj = np.vstack((x, y)).T
     S_cl.append(jj)
     print(len(y),y.shape, len(x),x.shape)
-
 
 
 #the arrays in S_f, S_m and S_clean are of different lengths
@@ -461,7 +383,7 @@ m.score(x, y)
 ypred_train = m.predict(xtrain)
 ypred_test = m.predict(xtest)
 ypred_all = m.predict(x)
-
+r2_score(ytest, ypred_test) #0.362332
 
 
 
@@ -483,66 +405,6 @@ def perform_linear_regression_sklearn(x_train,y_train,time,x_test):
     return y_test_predicted
 
 
-S_trivial_f_data = []
-S_trivial_m_data = []
-S_clean_data = []
-
-S_trivial_f_array =np.asarray(S_trivial_f_array)
-
-#Take the lists of S_trivial_m_all and S_trivial_f_all together
-
-v=np.asarray(S_m)
-y = v[:,:,0]
-x = v[:,:,1]
-
-y = np.concatenate(y).ravel()
-x = np.concatenate(x).ravel()
-
-	
-# save numpy array as csv file
-from numpy import asarray
-
-
-# save to csv file
-savetxt('S_trivial_male_first_5.csv', v, delimiter=',')
-savez_compressed('S_trivial_male_first_5.npz', v)
-
-# load dict of arrays
-dict_data = load('S_trivial_male_first_5.npz')
-# extract the first array
-data = dict_data['arr_0']
-# print the array
-print(data)
-
-xtrain, xtest, ytrain, ytest = train_test_split(x, y, test_size = 0.25, shuffle = False)
-
-#Reshape your data either using array.reshape(-1, 1) if your data has a single
-#feature or array.reshape(1, -1) if it contains a single sample.
-
-xtrain = xtrain.reshape(-1, 1)
-xtest = xtest.reshape(-1, 1)
-
-x = x.reshape(-1, 1)
-
-
-reg = LinearRegression().fit(xtrain,ytrain)
-
-m = LinearRegression()
-m.fit(xtrain, ytrain)
-m.score(xtrain, ytrain)
-m.score(xtest, ytest)
-m.score(x, y)
-ypred_train = m.predict(xtrain)
-ypred_test = m.predict(xtest)
-ypred_all = m.predict(x)
-
-
-
-
-
-
-
-
 
 def get_data(x_train,y_train,shuffle=False,batch_size=32):
     """Builds a batch i.e. (x, y) pair."""
@@ -561,15 +423,7 @@ def get_data(x_train,y_train,shuffle=False,batch_size=32):
     #y = np.asarray(y)
     return x, y
 
-batch_size=32
-for frame in x:
-    for i in range(batch_size):
-        x_file_name = frame
-        y_file_name = y_train[batch_size]
-        x.append(np.load(x_file_name))
-        y.append(sio.loadmat(y_file_name)['average_training_image'][:,time])
-    x = np.asarray(x)
-    y = np.asarray(y)
+
 
 for frame in v:
     #for i in range(batch_size):
@@ -659,106 +513,6 @@ aa = np.asarray(same_length_shapes)
 
 
 np.save('S_trivial_male_first_5.npy', aa)
-
-
-
-
-
-
-
-
-
-
-
-
-
-#split into train and test data
-from sklearn.model_selection import train_test_split
-
-xtrain, xtest, ytrain, ytest = train_test_split(x, y, test_size = 0.25, shuffle = False)
-
-inputs,labels = get_data(xtrain,ytrain,batch_size=32)
-
-
-def perform_linear_regression_sklearn(x_train,y_train,x_test):
-    num_samples = len(x_train)
-    num_test_samples = len(x_test)
-    inputs,labels = get_data(x_train,y_train,time,batch_size=num_samples)
-    print(inputs.shape,labels.shape)
-    reg=[]
-    for i in range(labels.shape[1]):
-        reg.append(LinearRegression().fit(inputs, labels[:,i]))
-
-    test_input,_ = get_data(x_test,y_train,time,batch_size=num_test_samples)
-    y_test_predicted = []
-    for i in range(labels.shape[1]):
-        y_test_predicted.append(reg[i].predict(test_input))
-    y_test_predicted = np.asarray(y_test_predicted)
-    return y_test_predicted
-
-
-reg = LinearRegression().fit(xtrain,ytrain)
-
-
-
-
-y_test_predicted = perform_linear_regression_sklearn(x_train,y_train,time,x_test)
-
-
-#get the y_pred data
-
-
-for timepoint in Strvial : #ym or yf
-    x_train_file_list = glob.glob(dnn_train_dir +'/*' +str(layer+1)+'.npy')
-    x_test_file_list = glob.glob(dnn_test_dir +'/*' +str(layer+1)+'.npy')
-    #print(x_file_list)
-    x_test_file_list.sort()
-    x_train_file_list.sort()
-    
-    
-    for timepoint in Ymic:
-
-        y_file_list = glob.glob(dir_train +'/*.mat')
-        y_file_list.sort()
-        print(len(y_file_list),len(x_train_file_list), dir_train)
-        #print(y_file_list)
-        x_train = x_train_file_list
-        y_train = y_file_list
-        #x_val = x_file_list[98:108]
-        #y_val = y_file_list[98:108]
-        x_test = x_test_file_list
-        #y_test = y_file_list[108:]
-        if use_sgd:
-            y_test_predicted = perform_linear_regression_sgd(x_train,y_train,x_test,time,batch_size=50,batch_size_test=50,num_epochs=100)
-            save_path = os.path.join(save_dir,"alex"+"_"+"layer" + "_" + str(layer+1) + "time" + str(time).zfill(3)+".npy")
-            print(save_path)
-            print(y_test_predicted.ravel().shape)
-            np.save(save_path,y_test_predicted.ravel())
-        else:
-            y_test_predicted = perform_linear_regression_sklearn(x_train,y_train,time,x_test)
-            save_path = os.path.join(save_dir,"sklearn_linear_alex"+"_"+"layer" + "_" + str(layer+1) + "time" + str(time).zfill(3)+".npy")
-            print(save_path)
-            print(y_test_predicted.ravel().shape)
-            np.save(save_path,y_test_predicted.ravel())
-            y_test_predicted = perform_lasso_regression_sklearn(x_train,y_train,time,x_test)
-            save_path = os.path.join(save_dir,"sklearn_lasso_alex"+"_"+"layer" + "_" + str(layer+1) + "time" + str(time).zfill(3)+".npy")
-            print(save_path)
-            print(y_test_predicted.ravel().shape)
-            np.save(save_path,y_test_predicted.ravel())
-            y_test_predicted = perform_ridge_regression_sklearn(x_train,y_train,time,x_test)
-            save_path = os.path.join(save_dir,"sklearn_ridge_alex"+"_"+"layer" + "_" + str(layer+1) + "time" + str(time).zfill(3)+".npy")
-            print(save_path)
-            print(y_test_predicted.ravel().shape)
-            np.save(save_path,y_test_predicted.ravel())
-            y_test_predicted = perform_elastic_regression_sklearn(x_train,y_train,time,x_test)
-            save_path = os.path.join(save_dir,"sklearn_elasticnet_alex"+"_"+"layer" + "_" + str(layer+1) + "time" + str(time).zfill(3)+".npy")
-            print(save_path)
-            print(y_test_predicted.ravel().shape)
-            np.save(save_path,y_test_predicted.ravel())
-
-
-reg = LinearRegression().fit(xtrain,ytrain)
-
 
 
 
